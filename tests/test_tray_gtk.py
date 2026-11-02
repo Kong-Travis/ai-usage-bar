@@ -188,6 +188,16 @@ class GtkMenu(unittest.TestCase):
         children[2].activate()
         self.assertEqual(self.clicked, [refresh])
 
+    def test_checked_item_is_a_ticked_check_item_that_fires_once(self):
+        hide = Action("hide_account", value="c-m")
+        gtk_menu = self.backend._build_gtk_menu((MenuItem("Show", checked=True, action=hide),))
+        child = gtk_menu.get_children()[0]
+        self.assertEqual(type(child).__name__, "CheckMenuItem")
+        self.assertTrue(child.get_active())
+        self.assertEqual(self.clicked, [])  # ticking it while building is not a click
+        child.activate()
+        self.assertEqual(self.clicked, [hide])
+
 
 if __name__ == "__main__":
     unittest.main()

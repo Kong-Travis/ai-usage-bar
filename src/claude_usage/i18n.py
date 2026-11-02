@@ -45,6 +45,9 @@ CATALOG: Dict[str, Dict[str, str]] = {
     "version": {VI: "Phiên bản v{version}", EN: "Version v{version}"},
     "support": {VI: "Ủng hộ tác giả", EN: "Support the author"},
     "refresh_now": {VI: "Làm mới ngay", EN: "Refresh now"},
+    "show_in_bar": {VI: "Hiện trên thanh menu", EN: "Show in the menu bar"},
+    "collapse": {VI: "Thu gọn (chỉ hiện biểu tượng)", EN: "Collapse to an icon"},
+    "expand": {VI: "Mở rộng (hiện số liệu)", EN: "Expand (show the numbers)"},
     # Shown in the language it switches to (see Presenter.language_item).
     "switch_language": {VI: "Chuyển sang tiếng Việt", EN: "Switch to English"},
     "quit": {VI: "Thoát", EN: "Quit"},

@@ -6,16 +6,21 @@ from typing import List, Optional
 
 from .i18n import LANGUAGES, Translator, normalize_language
 from .platform_setup import LINUX, WINDOWS, Host, build
-from .sources import set_conf_value
+from .sources import COMPACT_KEY, set_account_hidden, set_conf_value
 from .tray import TrayBackend, TrayController, relaunch
-from .xbar import ARGOS, SWIFTBAR, XbarRenderer
+from .view import COMPACT, HIDE_ACCOUNT, LANGUAGE, SHOW_ACCOUNT, Action
+from .xbar import ARGOS, SETTING_FLAGS, SWIFTBAR, XbarRenderer
 
-USAGE = """usage: claude-usage [--force | --update | --tray | --lang vi|en]
-  (none)       print the menu for SwiftBar (macOS) or Argos (GNOME)
-  --force      probe every account now, ignoring the cache
-  --update     install the latest release over this file
-  --tray       run as a tray icon (Windows, Linux desktops without Argos)
-  --lang LANG  menu language: vi (default) or en"""
+USAGE = """usage: claude-usage [--force | --update | --tray | --lang vi|en | --show LABEL |
+                     --hide LABEL | --compact on|off]
+  (none)          print the menu for SwiftBar (macOS) or Argos (GNOME)
+  --force         probe every account now, ignoring the cache
+  --update        install the latest release over this file
+  --tray          run as a tray icon (Windows, Linux desktops without Argos)
+  --lang LANG     menu language: vi (default) or en
+  --show LABEL    show this account in the bar title again
+  --hide LABEL    leave this account out of the bar title (it stays in the menu)
+  --compact on    show only an icon in the bar; off shows the numbers again"""
 
 
 def tray_backend(os_name: str, tr: Translator) -> TrayBackend:
@@ -28,8 +33,28 @@ def tray_backend(os_name: str, tr: Translator) -> TrayBackend:
     raise SystemExit("--tray is for Windows and Linux; on macOS use SwiftBar")
 
 
-def set_language(host: Host, lang: str) -> None:
-    set_conf_value(host.conf_path, "language", lang)
+def change_setting(host: Host, action: Action) -> None:
+    """Write a settings action from the menu to the conf file."""
+    if action.kind == LANGUAGE:
+        set_conf_value(host.conf_path, "language", action.value)
+    elif action.kind in (SHOW_ACCOUNT, HIDE_ACCOUNT):
+        set_account_hidden(host.conf_path, host.home, action.value, action.kind == HIDE_ACCOUNT)
+    elif action.kind == COMPACT:
+        set_conf_value(host.conf_path, COMPACT_KEY, action.value)
+
+
+def setting_from_args(args: List[str]) -> Optional[Action]:
+    """["--hide", "c-m"] -> Action(HIDE_ACCOUNT, value="c-m"); None for anything else."""
+    if len(args) != 2:
+        return None
+    kind = next((k for k, flag in SETTING_FLAGS.items() if flag == args[0]), None)
+    value = args[1].strip()
+    if kind == LANGUAGE:
+        value = normalize_language(value) or ""
+        return Action(kind, value=value) if value in LANGUAGES else None
+    if kind == COMPACT:
+        return Action(kind, value=value.lower()) if value.lower() in ("on", "off") else None
+    return Action(kind, value=value) if kind and value else None
 
 
 def run_tray(host: Host) -> None:
@@ -43,7 +68,7 @@ def run_tray(host: Host) -> None:
         update=services.updater.update,
         restart=relaunch,
         translator=lambda: build(host).tr,
-        set_language=lambda lang: set_language(host, lang),
+        change_setting=lambda action: change_setting(host, action),
     ).run()
 
 
@@ -63,8 +88,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         build(host).app.refresh()
     elif args == ["--tray"]:
         run_tray(host)
-    elif len(args) == 2 and args[0] == "--lang" and normalize_language(args[1]) in LANGUAGES:
-        set_language(host, normalize_language(args[1]))
+    elif setting_from_args(args):
+        change_setting(host, setting_from_args(args))
     elif not args:
         print_menu(host)
     else:

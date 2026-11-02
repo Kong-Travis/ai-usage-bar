@@ -7,9 +7,11 @@ Xem thay đổi | href=https://github.com/Kong-Travis/claude-usage-bar/releases/
 C: claude-ci - token | size=13
 5 giờ: 50%  (reset sau 1 giờ)
 Tuần: 20%  (reset sau 1 ngày)
+Hiện trên thanh menu | checked=true bash="<SELF>" param1=--hide param2=claude-ci terminal=false refresh=true
 ---
 Cập nhật mỗi 3 phút | color=gray size=11
 Thứ tự số: % giới hạn 5 giờ / tuần / Fable tuần | color=gray size=11
 Phiên bản v<VERSION> | color=gray size=11 href=https://github.com/Kong-Travis/claude-usage-bar
+Thu gọn (chỉ hiện biểu tượng) | bash="<SELF>" param1=--compact param2=on terminal=false refresh=true
 Switch to English | bash="<SELF>" param1=--lang param2=en terminal=false refresh=true
 Làm mới ngay | bash="<SELF>" param1=--force terminal=false refresh=true

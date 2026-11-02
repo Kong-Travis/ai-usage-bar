@@ -48,6 +48,11 @@ distribution.
   per account. All accounts are read at the same time, so 10 accounts refresh as fast as one.
 - On Linux and Windows a browser login can expire while `claude` is not running; the menu then
   says so, and opening `claude` once renews it.
+- Too many accounts in the bar? Untick "Hiện trên thanh menu" / "Show in the menu bar" under an
+  account to leave it out of the bar; it stays in the menu, so you can tick it again. Click
+  "Thu gọn" / "Collapse to an icon" to show only an icon (orange or red when a limit is close),
+  and "Mở rộng" / "Expand" at the top of the menu to bring the numbers back. On Windows the tray
+  is always an icon, so there is no collapse item there.
 - New version available? The menu shows "Cập nhật ngay" / "Update now". One click updates it.
 - Settings go in `~/.config/claude-usage.conf` (Windows: `%USERPROFILE%\.config\claude-usage.conf`),
   one per line:
@@ -56,6 +61,8 @@ distribution.
   work = ~/tokens/work.txt      # add a token the scan cannot find
   keychain = off                # hide browser logins
   language = en                 # English menu (default: vi)
+  hide = c-m, c-nsc             # accounts (by name) left out of the bar
+  compact = on                  # only an icon in the bar
   ```
 
 - Shows `?`: click it to see the error, or check `~/.cache/claude-usage/last-run.log`.

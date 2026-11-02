@@ -3,20 +3,24 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import List, Optional, Sequence, Set, Tuple
+from typing import Iterable, List, Optional, Sequence, Set, Tuple
 
 from .domain import AccountRow, Clock
 from .i18n import EN, VI, Translator
 
 REFRESH, UPDATE, OPEN, QUIT, LANGUAGE = "refresh", "update", "open", "quit", "language"
+# Settings written to the conf file: show or hide one account in the bar title (value: its
+# label), and the icon-only bar (value: "on" or "off").
+SHOW_ACCOUNT, HIDE_ACCOUNT, COMPACT = "show_account", "hide_account", "compact"
+SETTINGS = (LANGUAGE, SHOW_ACCOUNT, HIDE_ACCOUNT, COMPACT)
 GRAY, GREEN, ORANGE, RED = "gray", "#2e7d32", "orange", "red"
 
 
 @dataclass(frozen=True)
 class Action:
-    kind: str       # REFRESH | UPDATE | OPEN | QUIT | LANGUAGE
+    kind: str       # REFRESH | UPDATE | OPEN | QUIT | one of SETTINGS
     url: str = ""   # for OPEN
-    value: str = ""  # for LANGUAGE: the language to switch to
+    value: str = ""  # for SETTINGS: the language, the account label, or "on" / "off"
 
 
 @dataclass(frozen=True)
@@ -26,6 +30,7 @@ class MenuItem:
     size: Optional[int] = None
     action: Optional[Action] = None
     separator: bool = False
+    checked: bool = False  # drawn with the frontend's native checkmark
 
 
 SEPARATOR = MenuItem(separator=True)
@@ -38,6 +43,8 @@ class Menu:
     update_available: bool
     worst: Optional[float]        # highest known percentage, None when nothing is known
     items: Tuple[MenuItem, ...]
+    # Draw only an icon in the bar. title still holds the numbers, for tooltips.
+    compact: bool = False
 
 
 def short_name(label: str, taken: Set[str]) -> str:
@@ -55,8 +62,15 @@ def short_name(label: str, taken: Set[str]) -> str:
 
 class Presenter:
     def __init__(self, clock: Clock, tr: Translator, version: str, repo_url: str, warn: float,
-                 crit: float, max_in_title: int, show_support: bool = False):
+                 crit: float, max_in_title: int, show_support: bool = False,
+                 hidden: Iterable[str] = (), compact: bool = False, offer_compact: bool = True):
+        """hidden: labels of the accounts left out of the bar title. compact: icon-only bar.
+        offer_compact: whether the menu has the collapse / expand item (not on Windows, whose
+        tray icon is always icon-only)."""
         self._clock = clock
+        self._hidden = frozenset(hidden)
+        self._compact = compact
+        self._offer_compact = offer_compact
         self._show_support = show_support
         self._tr = tr
         self._version = version
@@ -114,17 +128,27 @@ class Presenter:
                 self.language_item(),
             ]))
 
-        known = [r.usage for r in rows if r.usage]
+        # The bar (title, color, worst) covers the visible accounts; the menu lists them all,
+        # so a hidden account can be shown again.
+        shown = [r for r in rows if r.label not in self._hidden]
+        known = [r.usage for r in shown if r.usage]
         worst = max([max(u.percentages()) for u in known] or [0])
-        if len(rows) <= self._max_in_title:
+        if not shown:
+            title = "Claude"
+        elif len(shown) <= self._max_in_title:
             title = "  ".join(
                 "%s %s" % (r.short, "/".join("%d" % round(x) for x in r.usage.percentages()))
                 if r.usage else r.short + " ?"
-                for r in rows)
+                for r in shown)
         else:
             title = "Claude %d%%" % round(worst)
+        # With nothing to show, the bar keeps an icon so the menu can still be opened.
+        compact = self._compact or not shown
 
         items = list(update)
+        if self._offer_compact and self._compact:
+            # First in the menu: the way back from the icon-only bar.
+            items += [MenuItem(tr("expand"), action=Action(COMPACT, value="off")), SEPARATOR]
         for r in rows:
             items += self.account_items(r)
         items += [
@@ -135,11 +159,14 @@ class Presenter:
         ]
         if self._show_support:
             items.append(MenuItem(tr("support"), action=Action(OPEN, self._repo_url + "#support")))
+        if self._offer_compact and not self._compact:
+            items.append(MenuItem(tr("collapse"), action=Action(COMPACT, value="on")))
         items += [
             self.language_item(),
             MenuItem(tr("refresh_now"), action=Action(REFRESH)),
         ]
-        return Menu(title, self.color(worst), bool(new_tag), worst if known else None, tuple(items))
+        return Menu(title, self.color(worst), bool(new_tag), worst if known else None, tuple(items),
+                    compact)
 
     def account_items(self, r: AccountRow) -> List[MenuItem]:
         head = "%s: %s" % (r.short, r.label)
@@ -164,5 +191,8 @@ class Presenter:
                 items.append(MenuItem(tr("stale_data"), color=GRAY, size=11))
         if r.error:
             items.append(MenuItem(tr("error_line", error=r.error), color=GRAY, size=11))
+        shown = r.label not in self._hidden
+        items.append(MenuItem(tr("show_in_bar"), checked=shown,
+                              action=Action(HIDE_ACCOUNT if shown else SHOW_ACCOUNT, value=r.label)))
         items.append(SEPARATOR)
         return items

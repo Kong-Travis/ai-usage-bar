@@ -8,8 +8,8 @@ from unittest import mock
 from claude_usage.i18n import Translator
 from claude_usage.tray import (TRAY_REFRESH_SECONDS, TrayBackend, TrayController, error_menu,
                                loading_menu, quit_item, relaunch, relaunch_command, with_quit)
-from claude_usage.view import (LANGUAGE, OPEN, QUIT, REFRESH, SEPARATOR, UPDATE, Action, Menu,
-                               MenuItem)
+from claude_usage.view import (COMPACT, HIDE_ACCOUNT, LANGUAGE, OPEN, QUIT, REFRESH, SEPARATOR,
+                               SHOW_ACCOUNT, UPDATE, Action, Menu, MenuItem)
 
 VI = Translator("vi")
 REAL = Menu("C 1/2", None, False, 2.0, (MenuItem("row"), SEPARATOR, MenuItem("Làm mới ngay",
@@ -53,7 +53,7 @@ class Harness:
         self.refresh_calls = 0
         self.restarts = 0
         self.opened = []
-        self.languages = []
+        self.settings = []
         self.translator = translator or (lambda: VI)
 
         def default_build(force):
@@ -74,7 +74,7 @@ class Harness:
             update=update or (lambda: False),
             restart=restart,
             translator=self.translator,
-            set_language=self.languages.append,
+            change_setting=self.settings.append,
             open_url=self.opened.append,
             spawn=spawn or (lambda fn: fn()),
         )
@@ -156,14 +156,26 @@ class ActionsTest(unittest.TestCase):
         current = [Translator("vi")]
         h = Harness(translator=lambda: current[0])
 
-        def set_language(lang):
-            h.languages.append(lang)
-            current[0] = Translator(lang)
+        def change_setting(action):
+            h.settings.append(action)
+            current[0] = Translator(action.value)
 
-        h.controller._set_language = set_language
+        h.controller._change_setting = change_setting
         h.controller.on_action(Action(LANGUAGE, value="en"))
-        self.assertEqual(h.languages, ["en"])
+        self.assertEqual(h.settings, [Action(LANGUAGE, value="en")])
         self.assertEqual(h.backend.shown[-1].items[-1].text, "Quit")
+
+    def test_account_and_compact_actions_are_saved_then_the_menu_is_rebuilt(self):
+        h = Harness()
+        for action in (Action(HIDE_ACCOUNT, value="c-m"), Action(SHOW_ACCOUNT, value="c-m"),
+                       Action(COMPACT, value="on")):
+            h.controller.on_action(action)
+        self.assertEqual([a.kind for a in h.settings], [HIDE_ACCOUNT, SHOW_ACCOUNT, COMPACT])
+        self.assertEqual(len(h.build_calls), 3)
+
+    def test_with_quit_keeps_the_compact_flag(self):
+        menu = with_quit(Menu("C 1/2", None, False, 2.0, (), compact=True), Translator("vi"))
+        self.assertTrue(menu.compact)
 
 
 class ReloadTest(unittest.TestCase):

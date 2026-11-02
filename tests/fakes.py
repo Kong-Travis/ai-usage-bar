@@ -126,6 +126,12 @@ class FakeHome:
             os.chmod(p, mode)
         return p
 
+    def append(self, rel: str, text: str) -> str:
+        p = os.path.join(self.path, rel)
+        with open(p, "a") as f:
+            f.write(text)
+        return p
+
     def cleanup(self):
         shutil.rmtree(self.path, ignore_errors=True)
 

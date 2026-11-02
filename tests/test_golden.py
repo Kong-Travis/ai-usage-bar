@@ -58,6 +58,13 @@ def scenario_many_accounts_and_stale(home: FakeHome):
             tok("B1"): Plan({}, status=500)}, "v1.0.0"
 
 
+def scenario_hidden_and_compact(home: FakeHome):
+    plans, tag = scenario_two_accounts(home)
+    # claude-token is left out of the bar, so the icon takes work's red (93%).
+    home.append(".config/claude-usage.conf", "hide = claude-token\ncompact = on\n")
+    return plans, tag
+
+
 def scenario_no_accounts(home: FakeHome):
     home.write(".config/claude-usage.conf", CONF_NO_KEYCHAIN)
     return {}, "v1.2.2"
@@ -68,6 +75,7 @@ SCENARIOS = {
     "update_and_haiku_fallback": scenario_update_and_haiku_fallback,
     "many_accounts_and_stale": scenario_many_accounts_and_stale,
     "no_accounts": scenario_no_accounts,
+    "hidden_and_compact": scenario_hidden_and_compact,
 }
 
 
@@ -102,6 +110,9 @@ class GoldenSwiftBar(unittest.TestCase):
     def test_no_accounts(self):
         self.check("no_accounts")
 
+    def test_hidden_and_compact(self):
+        self.check("hidden_and_compact")
+
     def test_two_accounts_english(self):
         self.check("two_accounts", lang="en")
 
@@ -121,6 +132,66 @@ class LanguageSwitch(unittest.TestCase):
             with open(os.path.join(home.path, ".config", "claude-usage.conf"), encoding="utf-8") as f:
                 conf = f.read()
             self.assertEqual(conf, "keychain = off\nwork = ~/tokens/work.txt\nlanguage = vi\n")
+
+
+class BarChoices(unittest.TestCase):
+    """Picking the accounts shown in the bar and collapsing it to an icon, through the menu's
+    own commands, as SwiftBar runs them."""
+
+    def conf(self, home: FakeHome) -> str:
+        with open(os.path.join(home.path, ".config", "claude-usage.conf"), encoding="utf-8") as f:
+            return f.read()
+
+    def test_hide_compact_and_back_through_the_menu_commands(self):
+        with FakeHome() as home:
+            plans, tag = scenario_two_accounts(home)
+            with FakeServer(plans, latest_tag=tag) as server:
+                before = run_plugin(home, server)
+                self.assertTrue(before.startswith("T 0/65/1  W 93/72/50 | color=red"))
+                self.assertIn('Hiện trên thanh menu | checked=true bash="<SELF>" param1=--hide '
+                              'param2=work ', before)
+
+                self.assertEqual(run_plugin(home, server, "--hide", "work"), "")
+                hidden = run_plugin(home, server)
+                self.assertTrue(hidden.startswith("T 0/65/1 |\n"), hidden[:40])
+                self.assertIn("W: work", hidden)  # still in the menu, to show it again
+                self.assertIn('Hiện trên thanh menu | bash="<SELF>" param1=--show param2=work ',
+                              hidden)
+                self.assertNotIn("H: hide", hidden)  # the setting is not read as a token
+
+                run_plugin(home, server, "--compact", "on")
+                compact = run_plugin(home, server)
+                self.assertTrue(compact.startswith(
+                    ' | sfimage=speedometer tooltip="T 0/65/1"\n---\n'
+                    'Mở rộng (hiện số liệu) | bash="<SELF>" param1=--compact param2=off '),
+                    compact[:160])
+
+                run_plugin(home, server, "--compact", "off")
+                run_plugin(home, server, "--show", "work")
+                self.assertEqual(run_plugin(home, server), before)
+                self.assertEqual(self.conf(home), "keychain = off\nwork = ~/tokens/work.txt\n"
+                                                  "compact = off\n")
+                probes = [r for r in server.requests if r[1] == "/v1/messages"]
+                self.assertEqual(len(probes), 2)  # one per account: settings never re-probe
+
+    def test_hiding_every_account_leaves_an_icon_to_click(self):
+        with FakeHome() as home:
+            plans, tag = scenario_two_accounts(home)
+            home.append(".config/claude-usage.conf", "hide = work, claude-token\n")
+            with FakeServer(plans, latest_tag=tag) as server:
+                out = run_plugin(home, server)
+        self.assertTrue(out.startswith(' | sfimage=speedometer tooltip=Claude\n'), out[:60])
+
+    def test_a_label_with_spaces_round_trips(self):
+        with FakeHome() as home:
+            home.write(".config/claude-usage.conf", CONF_NO_KEYCHAIN + "my work = ~/t/w\n")
+            home.write("t/w", tok("W"))
+            plans = {tok("W"): Plan({"5h": (0.1, HOUR), "7d": (0.2, DAY)})}
+            with FakeServer(plans) as server:
+                self.assertIn('param1=--hide param2="my work" ', run_plugin(home, server))
+                run_plugin(home, server, "--hide", "my work")
+                self.assertTrue(run_plugin(home, server).startswith(" | sfimage=speedometer"))
+            self.assertIn("hide = my work\n", self.conf(home))
 
 
 class RejectedToken(unittest.TestCase):

@@ -35,14 +35,18 @@ class UserConfig:
         label = /path/to/token-file     add a token the scan cannot find
         keychain = off                  hide browser logins (keychain and credentials files)
         language = en                   English menus (default: vi, Vietnamese)
+        hide = c-m, c-nsc               accounts (by label) left out of the bar title
+        compact = on                    show only an icon in the bar
     """
     token_files: Tuple[Tuple[str, str], ...] = ()
     show_logins: bool = True
     language: Optional[str] = None
+    hidden: Tuple[str, ...] = ()
+    compact: bool = False
 
     @classmethod
     def load(cls, path: str, home: str) -> UserConfig:
-        token_files, show_logins, language = [], True, None
+        token_files, show_logins, language, hidden, compact = [], True, None, (), False
         try:
             with open(path, encoding="utf-8-sig", errors="ignore") as f:
                 lines = f.read().splitlines()
@@ -54,17 +58,46 @@ class UserConfig:
                 continue
             key, val = (s.strip() for s in line.split("=", 1))
             if key in ("keychain", "logins"):
-                show_logins = val.lower() not in ("off", "no", "false", "0")
+                show_logins = not is_off(val)
             elif key == "language":
                 language = normalize_language(val)
+            elif key == HIDE_KEY:
+                hidden = split_labels(val)
+            elif key == COMPACT_KEY:
+                compact = val.lower() in ("on", "yes", "true", "1")
             elif val:
                 token_files.append((key, expand_path(val, home)))
-        return cls(tuple(token_files), show_logins, language)
+        return cls(tuple(token_files), show_logins, language, hidden, compact)
 
 
-def set_conf_value(path: str, key: str, value: str) -> None:
+HIDE_KEY, COMPACT_KEY = "hide", "compact"
+
+
+def is_off(value: str) -> bool:
+    return value.lower() in ("off", "no", "false", "0")
+
+
+def split_labels(value: str) -> Tuple[str, ...]:
+    """"c-m, c-nsc" -> ("c-m", "c-nsc"), without blanks or repeats."""
+    out: List[str] = []
+    for part in value.split(","):
+        part = part.strip()
+        if part and part not in out:
+            out.append(part)
+    return tuple(out)
+
+
+def set_account_hidden(path: str, home: str, label: str, hidden: bool) -> None:
+    """Add label to, or remove it from, the `hide =` list in the conf file."""
+    labels = [x for x in UserConfig.load(path, home).hidden if x != label]
+    if hidden:
+        labels.append(label)
+    set_conf_value(path, HIDE_KEY, ", ".join(labels) if labels else None)
+
+
+def set_conf_value(path: str, key: str, value: Optional[str]) -> None:
     """Set `key = value` in the conf file, replacing an existing line for key and keeping
-    every other line (comments included)."""
+    every other line (comments included). value None removes the line."""
     try:
         with open(path, encoding="utf-8-sig", errors="ignore") as f:
             lines = f.read().splitlines()
@@ -74,12 +107,12 @@ def set_conf_value(path: str, key: str, value: str) -> None:
     out, done = [], False
     for line in lines:
         if line.split("#", 1)[0].split("=", 1)[0].strip() == key and "=" in line:
-            if not done:
+            if not done and value is not None:
                 out.append(new_line)
-                done = True
+            done = True
             continue
         out.append(line)
-    if not done:
+    if not done and value is not None:
         out.append(new_line)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     tmp = path + ".tmp"

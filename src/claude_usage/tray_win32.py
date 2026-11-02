@@ -28,7 +28,7 @@ class _W32:
     WM_APP = 0x8000
     NIM_ADD, NIM_MODIFY, NIM_DELETE = 0, 1, 2
     NIF_MESSAGE, NIF_ICON, NIF_TIP = 0x1, 0x2, 0x4
-    MF_STRING, MF_GRAYED, MF_SEPARATOR = 0x0, 0x1, 0x800
+    MF_STRING, MF_GRAYED, MF_CHECKED, MF_SEPARATOR = 0x0, 0x1, 0x8, 0x800
     TPM_RIGHTBUTTON, TPM_NONOTIFY, TPM_RETURNCMD = 0x2, 0x80, 0x100
     SM_CXSMICON = 49
     BI_RGB, DIB_RGB_COLORS = 0, 0
@@ -119,7 +119,8 @@ def win32_menu_entries(items: Sequence[MenuItem]) -> Tuple[List[Win32MenuEntry],
         elif item.action is not None:
             command = len(actions) + 1
             actions[command] = item.action
-            entries.append((_W32.MF_STRING, command, win32_menu_label(item.text)))
+            flags = _W32.MF_STRING | (_W32.MF_CHECKED if item.checked else 0)
+            entries.append((flags, command, win32_menu_label(item.text)))
         else:
             entries.append((_W32.MF_STRING | _W32.MF_GRAYED, 0, win32_menu_label(item.text)))
     return entries, actions

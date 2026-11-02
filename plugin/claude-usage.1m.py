@@ -224,6 +224,9 @@ CATALOG: Dict[str, Dict[str, str]] = {
     "version": {VI: "Phiên bản v{version}", EN: "Version v{version}"},
     "support": {VI: "Ủng hộ tác giả", EN: "Support the author"},
     "refresh_now": {VI: "Làm mới ngay", EN: "Refresh now"},
+    "show_in_bar": {VI: "Hiện trên thanh menu", EN: "Show in the menu bar"},
+    "collapse": {VI: "Thu gọn (chỉ hiện biểu tượng)", EN: "Collapse to an icon"},
+    "expand": {VI: "Mở rộng (hiện số liệu)", EN: "Expand (show the numbers)"},
     # Shown in the language it switches to (see Presenter.language_item).
     "switch_language": {VI: "Chuyển sang tiếng Việt", EN: "Switch to English"},
     "quit": {VI: "Thoát", EN: "Quit"},
@@ -413,14 +416,18 @@ class UserConfig:
         label = /path/to/token-file     add a token the scan cannot find
         keychain = off                  hide browser logins (keychain and credentials files)
         language = en                   English menus (default: vi, Vietnamese)
+        hide = c-m, c-nsc               accounts (by label) left out of the bar title
+        compact = on                    show only an icon in the bar
     """
     token_files: Tuple[Tuple[str, str], ...] = ()
     show_logins: bool = True
     language: Optional[str] = None
+    hidden: Tuple[str, ...] = ()
+    compact: bool = False
 
     @classmethod
     def load(cls, path: str, home: str) -> UserConfig:
-        token_files, show_logins, language = [], True, None
+        token_files, show_logins, language, hidden, compact = [], True, None, (), False
         try:
             with open(path, encoding="utf-8-sig", errors="ignore") as f:
                 lines = f.read().splitlines()
@@ -432,17 +439,46 @@ class UserConfig:
                 continue
             key, val = (s.strip() for s in line.split("=", 1))
             if key in ("keychain", "logins"):
-                show_logins = val.lower() not in ("off", "no", "false", "0")
+                show_logins = not is_off(val)
             elif key == "language":
                 language = normalize_language(val)
+            elif key == HIDE_KEY:
+                hidden = split_labels(val)
+            elif key == COMPACT_KEY:
+                compact = val.lower() in ("on", "yes", "true", "1")
             elif val:
                 token_files.append((key, expand_path(val, home)))
-        return cls(tuple(token_files), show_logins, language)
+        return cls(tuple(token_files), show_logins, language, hidden, compact)
 
 
-def set_conf_value(path: str, key: str, value: str) -> None:
+HIDE_KEY, COMPACT_KEY = "hide", "compact"
+
+
+def is_off(value: str) -> bool:
+    return value.lower() in ("off", "no", "false", "0")
+
+
+def split_labels(value: str) -> Tuple[str, ...]:
+    """"c-m, c-nsc" -> ("c-m", "c-nsc"), without blanks or repeats."""
+    out: List[str] = []
+    for part in value.split(","):
+        part = part.strip()
+        if part and part not in out:
+            out.append(part)
+    return tuple(out)
+
+
+def set_account_hidden(path: str, home: str, label: str, hidden: bool) -> None:
+    """Add label to, or remove it from, the `hide =` list in the conf file."""
+    labels = [x for x in UserConfig.load(path, home).hidden if x != label]
+    if hidden:
+        labels.append(label)
+    set_conf_value(path, HIDE_KEY, ", ".join(labels) if labels else None)
+
+
+def set_conf_value(path: str, key: str, value: Optional[str]) -> None:
     """Set `key = value` in the conf file, replacing an existing line for key and keeping
-    every other line (comments included)."""
+    every other line (comments included). value None removes the line."""
     try:
         with open(path, encoding="utf-8-sig", errors="ignore") as f:
             lines = f.read().splitlines()
@@ -452,12 +488,12 @@ def set_conf_value(path: str, key: str, value: str) -> None:
     out, done = [], False
     for line in lines:
         if line.split("#", 1)[0].split("=", 1)[0].strip() == key and "=" in line:
-            if not done:
+            if not done and value is not None:
                 out.append(new_line)
-                done = True
+            done = True
             continue
         out.append(line)
-    if not done:
+    if not done and value is not None:
         out.append(new_line)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     tmp = path + ".tmp"
@@ -1103,18 +1139,22 @@ class IdentityService:
 
 import re
 from dataclasses import dataclass
-from typing import List, Optional, Sequence, Set, Tuple
+from typing import Iterable, List, Optional, Sequence, Set, Tuple
 
 
 REFRESH, UPDATE, OPEN, QUIT, LANGUAGE = "refresh", "update", "open", "quit", "language"
+# Settings written to the conf file: show or hide one account in the bar title (value: its
+# label), and the icon-only bar (value: "on" or "off").
+SHOW_ACCOUNT, HIDE_ACCOUNT, COMPACT = "show_account", "hide_account", "compact"
+SETTINGS = (LANGUAGE, SHOW_ACCOUNT, HIDE_ACCOUNT, COMPACT)
 GRAY, GREEN, ORANGE, RED = "gray", "#2e7d32", "orange", "red"
 
 
 @dataclass(frozen=True)
 class Action:
-    kind: str       # REFRESH | UPDATE | OPEN | QUIT | LANGUAGE
+    kind: str       # REFRESH | UPDATE | OPEN | QUIT | one of SETTINGS
     url: str = ""   # for OPEN
-    value: str = ""  # for LANGUAGE: the language to switch to
+    value: str = ""  # for SETTINGS: the language, the account label, or "on" / "off"
 
 
 @dataclass(frozen=True)
@@ -1124,6 +1164,7 @@ class MenuItem:
     size: Optional[int] = None
     action: Optional[Action] = None
     separator: bool = False
+    checked: bool = False  # drawn with the frontend's native checkmark
 
 
 SEPARATOR = MenuItem(separator=True)
@@ -1136,6 +1177,8 @@ class Menu:
     update_available: bool
     worst: Optional[float]        # highest known percentage, None when nothing is known
     items: Tuple[MenuItem, ...]
+    # Draw only an icon in the bar. title still holds the numbers, for tooltips.
+    compact: bool = False
 
 
 def short_name(label: str, taken: Set[str]) -> str:
@@ -1153,8 +1196,15 @@ def short_name(label: str, taken: Set[str]) -> str:
 
 class Presenter:
     def __init__(self, clock: Clock, tr: Translator, version: str, repo_url: str, warn: float,
-                 crit: float, max_in_title: int, show_support: bool = False):
+                 crit: float, max_in_title: int, show_support: bool = False,
+                 hidden: Iterable[str] = (), compact: bool = False, offer_compact: bool = True):
+        """hidden: labels of the accounts left out of the bar title. compact: icon-only bar.
+        offer_compact: whether the menu has the collapse / expand item (not on Windows, whose
+        tray icon is always icon-only)."""
         self._clock = clock
+        self._hidden = frozenset(hidden)
+        self._compact = compact
+        self._offer_compact = offer_compact
         self._show_support = show_support
         self._tr = tr
         self._version = version
@@ -1212,17 +1262,27 @@ class Presenter:
                 self.language_item(),
             ]))
 
-        known = [r.usage for r in rows if r.usage]
+        # The bar (title, color, worst) covers the visible accounts; the menu lists them all,
+        # so a hidden account can be shown again.
+        shown = [r for r in rows if r.label not in self._hidden]
+        known = [r.usage for r in shown if r.usage]
         worst = max([max(u.percentages()) for u in known] or [0])
-        if len(rows) <= self._max_in_title:
+        if not shown:
+            title = "Claude"
+        elif len(shown) <= self._max_in_title:
             title = "  ".join(
                 "%s %s" % (r.short, "/".join("%d" % round(x) for x in r.usage.percentages()))
                 if r.usage else r.short + " ?"
-                for r in rows)
+                for r in shown)
         else:
             title = "Claude %d%%" % round(worst)
+        # With nothing to show, the bar keeps an icon so the menu can still be opened.
+        compact = self._compact or not shown
 
         items = list(update)
+        if self._offer_compact and self._compact:
+            # First in the menu: the way back from the icon-only bar.
+            items += [MenuItem(tr("expand"), action=Action(COMPACT, value="off")), SEPARATOR]
         for r in rows:
             items += self.account_items(r)
         items += [
@@ -1233,11 +1293,14 @@ class Presenter:
         ]
         if self._show_support:
             items.append(MenuItem(tr("support"), action=Action(OPEN, self._repo_url + "#support")))
+        if self._offer_compact and not self._compact:
+            items.append(MenuItem(tr("collapse"), action=Action(COMPACT, value="on")))
         items += [
             self.language_item(),
             MenuItem(tr("refresh_now"), action=Action(REFRESH)),
         ]
-        return Menu(title, self.color(worst), bool(new_tag), worst if known else None, tuple(items))
+        return Menu(title, self.color(worst), bool(new_tag), worst if known else None, tuple(items),
+                    compact)
 
     def account_items(self, r: AccountRow) -> List[MenuItem]:
         head = "%s: %s" % (r.short, r.label)
@@ -1262,6 +1325,9 @@ class Presenter:
                 items.append(MenuItem(tr("stale_data"), color=GRAY, size=11))
         if r.error:
             items.append(MenuItem(tr("error_line", error=r.error), color=GRAY, size=11))
+        shown = r.label not in self._hidden
+        items.append(MenuItem(tr("show_in_bar"), checked=shown,
+                              action=Action(HIDE_ACCOUNT if shown else SHOW_ACCOUNT, value=r.label)))
         items.append(SEPARATOR)
         return items
 
@@ -1447,7 +1513,8 @@ def build(host: Host, clock: Clock = None, http: HttpClient = None) -> Services:
         identity=IdentityService(ProfileClient(http, endpoints.api), cache, EMAIL_EVERY),
         releases=releases,
         presenter=Presenter(clock, tr, VERSION, REPO_URL, WARN_PCT, CRIT_PCT, MAX_IN_TITLE,
-                            SHOW_SUPPORT),
+                            SHOW_SUPPORT, hidden=config.hidden, compact=config.compact,
+                            offer_compact=host.os_name != WINDOWS),
         run_log=RunLog(host.cache_dir, clock, VERSION),
         version=VERSION,
     )
@@ -1471,6 +1538,7 @@ import sys
 import threading
 import webbrowser
 from abc import ABC, abstractmethod
+from dataclasses import replace
 from typing import Callable, List, Optional, Sequence
 
 
@@ -1514,13 +1582,15 @@ class TrayController:
     def __init__(self, backend: TrayBackend, build_menu: Callable[[bool], Menu],
                  refresh: Callable[[], None], update: Callable[[], bool],
                  restart: Callable[[], None], translator: Callable[[], Translator],
-                 set_language: Callable[[str], None],
+                 change_setting: Callable[[Action], None],
                  open_url: Callable[[str], object] = webbrowser.open,
                  spawn: Callable[[Callable[[], None]], None] = None):
-        """translator is called each time, so a language switch applies at once."""
+        """translator is called each time, so a language switch applies at once.
+        change_setting writes a settings action (language, shown accounts, compact) to the
+        conf file; the menu is rebuilt from it right after."""
         self._backend = backend
         self._translator = translator
-        self._set_language = set_language
+        self._change_setting = change_setting
         self._build_menu = build_menu
         self._refresh = refresh
         self._update = update
@@ -1572,8 +1642,8 @@ class TrayController:
             self._open_url(action.url)
         elif action.kind == UPDATE:
             self._spawn(self._do_update)
-        elif action.kind == LANGUAGE:
-            self._set_language(action.value)
+        elif action.kind in SETTINGS:
+            self._change_setting(action)
             self.reload()
         elif action.kind == QUIT:
             self._backend.quit()
@@ -1604,8 +1674,7 @@ def quit_item(tr: Translator) -> MenuItem:
 
 
 def with_quit(menu: Menu, tr: Translator) -> Menu:
-    return Menu(menu.title, menu.title_color, menu.update_available, menu.worst,
-                menu.items + (SEPARATOR, quit_item(tr)))
+    return replace(menu, items=menu.items + (SEPARATOR, quit_item(tr)))
 
 
 def loading_menu(tr: Translator) -> Menu:
@@ -1644,6 +1713,21 @@ from typing import List
 
 SWIFTBAR, ARGOS = "swiftbar", "argos"
 CLI_FLAGS = {REFRESH: "--force", UPDATE: "--update"}
+# Settings take one value: the language, the account label, or on / off.
+SETTING_FLAGS = {LANGUAGE: "--lang", SHOW_ACCOUNT: "--show", HIDE_ACCOUNT: "--hide",
+                 COMPACT: "--compact"}
+# The icon of the compact bar. "speedometer" is the SF Symbols 1 name of "gauge", so it also
+# resolves on Big Sur, the oldest macOS with sfimage.
+COMPACT_SFIMAGE, UPDATE_SFIMAGE = "speedometer", "arrow.down.circle"
+COMPACT_ARGOS_ICON = "utilities-system-monitor-symbolic"
+UPDATE_ARGOS_ICON = "software-update-available-symbolic"
+
+
+def xbar_quote(value: str) -> str:
+    """A parameter value SwiftBar and Argos read as one word, spaces included."""
+    if not any(c in value for c in " \t'\""):
+        return value
+    return "'%s'" % value if '"' in value else '"%s"' % value
 
 
 class XbarRenderer:
@@ -1665,16 +1749,29 @@ class XbarRenderer:
         return "\n".join(lines) + "\n"
 
     def title(self, menu: Menu) -> str:
+        if menu.compact:
+            return self.compact_title(menu)
         line = menu.title + " |"
         if menu.title_color:
             line += " color=" + menu.title_color
         if self._flavor == ARGOS:
             if menu.update_available:
-                line += " iconName=software-update-available-symbolic"
+                line += " iconName=" + UPDATE_ARGOS_ICON
             line += " dropdown=false"  # Argos repeats button lines in the menu otherwise
         elif menu.update_available:
-            line += " sfimage=arrow.down.circle"
+            line += " sfimage=" + UPDATE_SFIMAGE
         return line
+
+    def compact_title(self, menu: Menu) -> str:
+        """An icon and no text, tinted orange / red when a limit is close. Without a tint
+        SwiftBar draws it as a template image, like the other menu bar icons."""
+        if self._flavor == ARGOS:
+            icon = UPDATE_ARGOS_ICON if menu.update_available else COMPACT_ARGOS_ICON
+            return " | iconName=%s dropdown=false" % icon
+        line = " | sfimage=" + (UPDATE_SFIMAGE if menu.update_available else COMPACT_SFIMAGE)
+        if menu.title_color:
+            line += " sfcolor=" + menu.title_color
+        return line + " tooltip=" + xbar_quote(menu.title.replace("|", "/"))
 
     def item(self, item: MenuItem) -> str:
         params: List[str] = []
@@ -1682,15 +1779,18 @@ class XbarRenderer:
             params.append("color=" + item.color)
         if item.size:
             params.append("size=%d" % item.size)
+        if item.checked:  # Argos has no checkmark; a check icon stands in for it
+            params.append("iconName=object-select-symbolic" if self._flavor == ARGOS
+                          else "checked=true")
         a = item.action
         if a and a.kind == OPEN:
             params.append("href=" + a.url)
         elif a and a.kind in CLI_FLAGS:
             params.append('bash="%s" param1=%s terminal=false refresh=true'
                           % (self._self_path, CLI_FLAGS[a.kind]))
-        elif a and a.kind == LANGUAGE:
-            params.append('bash="%s" param1=--lang param2=%s terminal=false refresh=true'
-                          % (self._self_path, a.value))
+        elif a and a.kind in SETTING_FLAGS:
+            params.append('bash="%s" param1=%s param2=%s terminal=false refresh=true'
+                          % (self._self_path, SETTING_FLAGS[a.kind], xbar_quote(a.value)))
         text = item.text.replace("|", "/")
         return text + (" | " + " ".join(params) if params else "")
 
@@ -1704,12 +1804,16 @@ import sys
 from typing import List, Optional
 
 
-USAGE = """usage: claude-usage [--force | --update | --tray | --lang vi|en]
-  (none)       print the menu for SwiftBar (macOS) or Argos (GNOME)
-  --force      probe every account now, ignoring the cache
-  --update     install the latest release over this file
-  --tray       run as a tray icon (Windows, Linux desktops without Argos)
-  --lang LANG  menu language: vi (default) or en"""
+USAGE = """usage: claude-usage [--force | --update | --tray | --lang vi|en | --show LABEL |
+                     --hide LABEL | --compact on|off]
+  (none)          print the menu for SwiftBar (macOS) or Argos (GNOME)
+  --force         probe every account now, ignoring the cache
+  --update        install the latest release over this file
+  --tray          run as a tray icon (Windows, Linux desktops without Argos)
+  --lang LANG     menu language: vi (default) or en
+  --show LABEL    show this account in the bar title again
+  --hide LABEL    leave this account out of the bar title (it stays in the menu)
+  --compact on    show only an icon in the bar; off shows the numbers again"""
 
 
 def tray_backend(os_name: str, tr: Translator) -> TrayBackend:
@@ -1722,8 +1826,28 @@ def tray_backend(os_name: str, tr: Translator) -> TrayBackend:
     raise SystemExit("--tray is for Windows and Linux; on macOS use SwiftBar")
 
 
-def set_language(host: Host, lang: str) -> None:
-    set_conf_value(host.conf_path, "language", lang)
+def change_setting(host: Host, action: Action) -> None:
+    """Write a settings action from the menu to the conf file."""
+    if action.kind == LANGUAGE:
+        set_conf_value(host.conf_path, "language", action.value)
+    elif action.kind in (SHOW_ACCOUNT, HIDE_ACCOUNT):
+        set_account_hidden(host.conf_path, host.home, action.value, action.kind == HIDE_ACCOUNT)
+    elif action.kind == COMPACT:
+        set_conf_value(host.conf_path, COMPACT_KEY, action.value)
+
+
+def setting_from_args(args: List[str]) -> Optional[Action]:
+    """["--hide", "c-m"] -> Action(HIDE_ACCOUNT, value="c-m"); None for anything else."""
+    if len(args) != 2:
+        return None
+    kind = next((k for k, flag in SETTING_FLAGS.items() if flag == args[0]), None)
+    value = args[1].strip()
+    if kind == LANGUAGE:
+        value = normalize_language(value) or ""
+        return Action(kind, value=value) if value in LANGUAGES else None
+    if kind == COMPACT:
+        return Action(kind, value=value.lower()) if value.lower() in ("on", "off") else None
+    return Action(kind, value=value) if kind and value else None
 
 
 def run_tray(host: Host) -> None:
@@ -1737,7 +1861,7 @@ def run_tray(host: Host) -> None:
         update=services.updater.update,
         restart=relaunch,
         translator=lambda: build(host).tr,
-        set_language=lambda lang: set_language(host, lang),
+        change_setting=lambda action: change_setting(host, action),
     ).run()
 
 
@@ -1757,8 +1881,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         build(host).app.refresh()
     elif args == ["--tray"]:
         run_tray(host)
-    elif len(args) == 2 and args[0] == "--lang" and normalize_language(args[1]) in LANGUAGES:
-        set_language(host, normalize_language(args[1]))
+    elif setting_from_args(args):
+        change_setting(host, setting_from_args(args))
     elif not args:
         print_menu(host)
     else:
@@ -1957,7 +2081,8 @@ class GtkTrayBackend(TrayBackend):
     def show(self, menu: Menu) -> None:
         icon = gtk_pick_icon(gtk_severity(menu), self._has_icon)
         self._indicator.set_icon_full(icon, menu.title)
-        self._indicator.set_label(menu.title, menu.title)
+        label = "" if menu.compact else menu.title  # compact: the icon alone
+        self._indicator.set_label(label, label)
         self._indicator.set_title("%s: %s" % (self._tr("gtk_title"), menu.title))
         if self._shown != (menu.items, icon):  # rebuilding closes an open menu, so skip if same
             self._shown = (menu.items, icon)
@@ -1998,7 +2123,11 @@ class GtkTrayBackend(TrayBackend):
             if item.separator:
                 gtk_menu.append(Gtk.SeparatorMenuItem())
                 continue
-            widget = Gtk.MenuItem.new_with_mnemonic(gtk_menu_label(item.text))
+            if item.checked:
+                widget = Gtk.CheckMenuItem.new_with_mnemonic(gtk_menu_label(item.text))
+                widget.set_active(True)  # before connect, so this does not fire the action
+            else:
+                widget = Gtk.MenuItem.new_with_mnemonic(gtk_menu_label(item.text))
             if item.action is None:
                 widget.set_sensitive(False)
             else:
@@ -2060,7 +2189,7 @@ class _W32:
     WM_APP = 0x8000
     NIM_ADD, NIM_MODIFY, NIM_DELETE = 0, 1, 2
     NIF_MESSAGE, NIF_ICON, NIF_TIP = 0x1, 0x2, 0x4
-    MF_STRING, MF_GRAYED, MF_SEPARATOR = 0x0, 0x1, 0x800
+    MF_STRING, MF_GRAYED, MF_CHECKED, MF_SEPARATOR = 0x0, 0x1, 0x8, 0x800
     TPM_RIGHTBUTTON, TPM_NONOTIFY, TPM_RETURNCMD = 0x2, 0x80, 0x100
     SM_CXSMICON = 49
     BI_RGB, DIB_RGB_COLORS = 0, 0
@@ -2151,7 +2280,8 @@ def win32_menu_entries(items: Sequence[MenuItem]) -> Tuple[List[Win32MenuEntry],
         elif item.action is not None:
             command = len(actions) + 1
             actions[command] = item.action
-            entries.append((_W32.MF_STRING, command, win32_menu_label(item.text)))
+            flags = _W32.MF_STRING | (_W32.MF_CHECKED if item.checked else 0)
+            entries.append((flags, command, win32_menu_label(item.text)))
         else:
             entries.append((_W32.MF_STRING | _W32.MF_GRAYED, 0, win32_menu_label(item.text)))
     return entries, actions

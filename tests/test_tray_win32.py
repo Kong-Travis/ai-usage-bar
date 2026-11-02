@@ -94,6 +94,12 @@ class PureHelpers(unittest.TestCase):
         self.assertEqual(actions, {1: Action(REFRESH), 2: Action(OPEN, "https://example.com"),
                                    3: Action(QUIT)})
 
+    def test_checked_item_gets_the_native_checkmark(self):
+        hide = Action("hide_account", value="c-m")
+        entries, _ = tw.win32_menu_entries((MenuItem("Show", checked=True, action=hide),))
+        W = tw._W32
+        self.assertEqual(entries, [(W.MF_STRING | W.MF_CHECKED, 1, "Show")])
+
     def test_backend_implements_every_abstract_method(self):
         self.assertTrue(issubclass(tw.Win32TrayBackend, TrayBackend))
         self.assertEqual(tw.Win32TrayBackend.__abstractmethods__, frozenset())
@@ -369,7 +375,7 @@ class ControllerWiring(unittest.TestCase):
         controller = TrayController(backend, build_menu=lambda force: menu, refresh=lambda: None,
                                     update=lambda: False, restart=lambda: None,
                                     translator=lambda: Translator("en"),
-                                    set_language=lambda lang: None, spawn=lambda fn: fn())
+                                    change_setting=lambda action: None, spawn=lambda fn: fn())
         quit_command = []
 
         def click_quit():
@@ -428,7 +434,7 @@ class RealWin32(unittest.TestCase):
         backend = Recording(mutex_name="Local\\claude-usage-bar-smoke-%d" % os.getpid())
         controller = TrayController(backend, build_menu=lambda force: menu, refresh=lambda: None,
                                     update=lambda: False, restart=lambda: None,
-                                    translator=Translator, set_language=lambda lang: None)
+                                    translator=Translator, change_setting=lambda action: None)
         quitter = threading.Timer(2.0, lambda: backend.call_soon(backend.quit))
         watchdog = threading.Timer(30.0, lambda: os._exit(3))  # a missed quit must not hang CI
         quitter.start()

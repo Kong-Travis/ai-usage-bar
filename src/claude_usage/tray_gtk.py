@@ -189,7 +189,8 @@ class GtkTrayBackend(TrayBackend):
     def show(self, menu: Menu) -> None:
         icon = gtk_pick_icon(gtk_severity(menu), self._has_icon)
         self._indicator.set_icon_full(icon, menu.title)
-        self._indicator.set_label(menu.title, menu.title)
+        label = "" if menu.compact else menu.title  # compact: the icon alone
+        self._indicator.set_label(label, label)
         self._indicator.set_title("%s: %s" % (self._tr("gtk_title"), menu.title))
         if self._shown != (menu.items, icon):  # rebuilding closes an open menu, so skip if same
             self._shown = (menu.items, icon)
@@ -230,7 +231,11 @@ class GtkTrayBackend(TrayBackend):
             if item.separator:
                 gtk_menu.append(Gtk.SeparatorMenuItem())
                 continue
-            widget = Gtk.MenuItem.new_with_mnemonic(gtk_menu_label(item.text))
+            if item.checked:
+                widget = Gtk.CheckMenuItem.new_with_mnemonic(gtk_menu_label(item.text))
+                widget.set_active(True)  # before connect, so this does not fire the action
+            else:
+                widget = Gtk.MenuItem.new_with_mnemonic(gtk_menu_label(item.text))
             if item.action is None:
                 widget.set_sensitive(False)
             else:

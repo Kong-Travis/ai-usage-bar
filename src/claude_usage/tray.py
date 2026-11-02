@@ -11,10 +11,11 @@ import sys
 import threading
 import webbrowser
 from abc import ABC, abstractmethod
+from dataclasses import replace
 from typing import Callable, List, Optional, Sequence
 
 from .i18n import Translator
-from .view import LANGUAGE, OPEN, QUIT, REFRESH, UPDATE, Action, Menu, MenuItem, SEPARATOR
+from .view import OPEN, QUIT, REFRESH, SETTINGS, UPDATE, Action, Menu, MenuItem, SEPARATOR
 
 TRAY_REFRESH_SECONDS = 60
 
@@ -56,13 +57,15 @@ class TrayController:
     def __init__(self, backend: TrayBackend, build_menu: Callable[[bool], Menu],
                  refresh: Callable[[], None], update: Callable[[], bool],
                  restart: Callable[[], None], translator: Callable[[], Translator],
-                 set_language: Callable[[str], None],
+                 change_setting: Callable[[Action], None],
                  open_url: Callable[[str], object] = webbrowser.open,
                  spawn: Callable[[Callable[[], None]], None] = None):
-        """translator is called each time, so a language switch applies at once."""
+        """translator is called each time, so a language switch applies at once.
+        change_setting writes a settings action (language, shown accounts, compact) to the
+        conf file; the menu is rebuilt from it right after."""
         self._backend = backend
         self._translator = translator
-        self._set_language = set_language
+        self._change_setting = change_setting
         self._build_menu = build_menu
         self._refresh = refresh
         self._update = update
@@ -114,8 +117,8 @@ class TrayController:
             self._open_url(action.url)
         elif action.kind == UPDATE:
             self._spawn(self._do_update)
-        elif action.kind == LANGUAGE:
-            self._set_language(action.value)
+        elif action.kind in SETTINGS:
+            self._change_setting(action)
             self.reload()
         elif action.kind == QUIT:
             self._backend.quit()
@@ -146,8 +149,7 @@ def quit_item(tr: Translator) -> MenuItem:
 
 
 def with_quit(menu: Menu, tr: Translator) -> Menu:
-    return Menu(menu.title, menu.title_color, menu.update_available, menu.worst,
-                menu.items + (SEPARATOR, quit_item(tr)))
+    return replace(menu, items=menu.items + (SEPARATOR, quit_item(tr)))
 
 
 def loading_menu(tr: Translator) -> Menu:

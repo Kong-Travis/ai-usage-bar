@@ -3,10 +3,26 @@ from __future__ import annotations
 
 from typing import List
 
-from .view import LANGUAGE, OPEN, QUIT, REFRESH, UPDATE, Menu, MenuItem
+from .view import (COMPACT, HIDE_ACCOUNT, LANGUAGE, OPEN, QUIT, REFRESH, SHOW_ACCOUNT, UPDATE, Menu,
+                   MenuItem)
 
 SWIFTBAR, ARGOS = "swiftbar", "argos"
 CLI_FLAGS = {REFRESH: "--force", UPDATE: "--update"}
+# Settings take one value: the language, the account label, or on / off.
+SETTING_FLAGS = {LANGUAGE: "--lang", SHOW_ACCOUNT: "--show", HIDE_ACCOUNT: "--hide",
+                 COMPACT: "--compact"}
+# The icon of the compact bar. "speedometer" is the SF Symbols 1 name of "gauge", so it also
+# resolves on Big Sur, the oldest macOS with sfimage.
+COMPACT_SFIMAGE, UPDATE_SFIMAGE = "speedometer", "arrow.down.circle"
+COMPACT_ARGOS_ICON = "utilities-system-monitor-symbolic"
+UPDATE_ARGOS_ICON = "software-update-available-symbolic"
+
+
+def xbar_quote(value: str) -> str:
+    """A parameter value SwiftBar and Argos read as one word, spaces included."""
+    if not any(c in value for c in " \t'\""):
+        return value
+    return "'%s'" % value if '"' in value else '"%s"' % value
 
 
 class XbarRenderer:
@@ -28,16 +44,29 @@ class XbarRenderer:
         return "\n".join(lines) + "\n"
 
     def title(self, menu: Menu) -> str:
+        if menu.compact:
+            return self.compact_title(menu)
         line = menu.title + " |"
         if menu.title_color:
             line += " color=" + menu.title_color
         if self._flavor == ARGOS:
             if menu.update_available:
-                line += " iconName=software-update-available-symbolic"
+                line += " iconName=" + UPDATE_ARGOS_ICON
             line += " dropdown=false"  # Argos repeats button lines in the menu otherwise
         elif menu.update_available:
-            line += " sfimage=arrow.down.circle"
+            line += " sfimage=" + UPDATE_SFIMAGE
         return line
+
+    def compact_title(self, menu: Menu) -> str:
+        """An icon and no text, tinted orange / red when a limit is close. Without a tint
+        SwiftBar draws it as a template image, like the other menu bar icons."""
+        if self._flavor == ARGOS:
+            icon = UPDATE_ARGOS_ICON if menu.update_available else COMPACT_ARGOS_ICON
+            return " | iconName=%s dropdown=false" % icon
+        line = " | sfimage=" + (UPDATE_SFIMAGE if menu.update_available else COMPACT_SFIMAGE)
+        if menu.title_color:
+            line += " sfcolor=" + menu.title_color
+        return line + " tooltip=" + xbar_quote(menu.title.replace("|", "/"))
 
     def item(self, item: MenuItem) -> str:
         params: List[str] = []
@@ -45,14 +74,17 @@ class XbarRenderer:
             params.append("color=" + item.color)
         if item.size:
             params.append("size=%d" % item.size)
+        if item.checked:  # Argos has no checkmark; a check icon stands in for it
+            params.append("iconName=object-select-symbolic" if self._flavor == ARGOS
+                          else "checked=true")
         a = item.action
         if a and a.kind == OPEN:
             params.append("href=" + a.url)
         elif a and a.kind in CLI_FLAGS:
             params.append('bash="%s" param1=%s terminal=false refresh=true'
                           % (self._self_path, CLI_FLAGS[a.kind]))
-        elif a and a.kind == LANGUAGE:
-            params.append('bash="%s" param1=--lang param2=%s terminal=false refresh=true'
-                          % (self._self_path, a.value))
+        elif a and a.kind in SETTING_FLAGS:
+            params.append('bash="%s" param1=%s param2=%s terminal=false refresh=true'
+                          % (self._self_path, SETTING_FLAGS[a.kind], xbar_quote(a.value)))
         text = item.text.replace("|", "/")
         return text + (" | " + " ".join(params) if params else "")

@@ -4,14 +4,17 @@ T: claude-token - token | size=13
 5-hour: 0%  (resets in 2h 15m)
 Weekly: 65%  (resets in 2d 21h)
 Fable (weekly): 1%  (resets in 2d 21h)
+Show in the menu bar | checked=true bash="<SELF>" param1=--hide param2=claude-token terminal=false refresh=true
 ---
 W: work - token | size=13
 5-hour: 93%  (resets in 45m) | color=red
 Weekly: 72%  (resets in 6d) | color=orange
 Fable (weekly): 50%  (resets in 6d)
+Show in the menu bar | checked=true bash="<SELF>" param1=--hide param2=work terminal=false refresh=true
 ---
 Refreshes every 3 minutes | color=gray size=11
 Numbers: % of 5-hour / weekly / Fable weekly limit | color=gray size=11
 Version v<VERSION> | color=gray size=11 href=https://github.com/Kong-Travis/claude-usage-bar
+Collapse to an icon | bash="<SELF>" param1=--compact param2=on terminal=false refresh=true
 Chuyển sang tiếng Việt | bash="<SELF>" param1=--lang param2=vi terminal=false refresh=true
 Refresh now | bash="<SELF>" param1=--force terminal=false refresh=true

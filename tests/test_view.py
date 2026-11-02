@@ -164,7 +164,7 @@ class AccountItems(unittest.TestCase):
         items = presenter().account_items(row("C", None))
         self.assertEqual(items[1].text, "Không đọc được hạn mức")
         self.assertEqual(items[1].color, GRAY)
-        self.assertEqual(len(items), 3)
+        self.assertEqual(len(items), 4)  # head, unreadable, show-in-bar toggle, separator
 
     def test_stale_numbers_note_and_error_line(self):
         items = presenter().account_items(row("C", usage(), error="RuntimeError: x"))
@@ -181,6 +181,37 @@ class AccountItems(unittest.TestCase):
         # The pipe is only escaped by the renderer (see test_xbar).
         items = presenter().account_items(row("C", None, error="a | b"))
         self.assertIn("Lỗi: a | b", [i.text for i in items])
+
+
+class BarChoices(unittest.TestCase):
+    def rows(self):
+        return [row("C", usage(95.0, 10.0), label="claude"), row("C2", usage(5.0, 6.0), label="c-m"),
+                row("C3", usage(7.0, 8.0), label="c-nsc"), row("C4", usage(1.0, 2.0), label="x")]
+
+    def present(self, rows, **kw):
+        return Presenter(FakeClock(), Translator("vi"), "1.2.2", REPO_URL, 70, 90, 3,
+                         **kw).present(rows, None)
+
+    def test_hidden_accounts_leave_the_title_color_and_worst_but_not_the_menu(self):
+        menu = self.present(self.rows(), hidden=["claude"])
+        # Four accounts would collapse to "Claude 95%"; three visible ones fit the title.
+        self.assertEqual(menu.title, "C2 5/6  C3 7/8  C4 1/2")
+        self.assertIsNone(menu.title_color)
+        self.assertEqual(menu.worst, 8.0)
+        self.assertFalse(menu.compact)
+        heads = [i.text for i in menu.items if i.size == 13]
+        self.assertEqual(heads, ["C: claude", "C2: c-m", "C3: c-nsc", "C4: x"])
+
+    def test_compact_menu_starts_with_expand_and_drops_collapse(self):
+        menu = self.present(self.rows()[:1], compact=True)
+        self.assertTrue(menu.compact)
+        self.assertEqual(menu.title, "C 95/10")  # kept for tooltips
+        self.assertEqual(menu.items[0].text, "Mở rộng (hiện số liệu)")
+        self.assertNotIn("Thu gọn (chỉ hiện biểu tượng)", [i.text for i in menu.items])
+
+    def test_no_collapse_item_where_the_bar_is_always_an_icon(self):
+        texts = [i.text for i in self.present(self.rows()[:1], offer_compact=False).items]
+        self.assertNotIn("Thu gọn (chỉ hiện biểu tượng)", texts)
 
 
 class Footer(unittest.TestCase):
