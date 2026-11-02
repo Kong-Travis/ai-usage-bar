@@ -105,8 +105,7 @@ def build(host: Host, clock: Clock = None, http: HttpClient = None) -> Services:
         identity=IdentityService(ProfileClient(http, endpoints.api), cache, EMAIL_EVERY),
         releases=releases,
         presenter=Presenter(clock, tr, VERSION, REPO_URL, WARN_PCT, CRIT_PCT, MAX_IN_TITLE,
-                            SHOW_SUPPORT, hidden=config.hidden, compact=config.compact,
-                            offer_compact=host.os_name != WINDOWS),
+                            SHOW_SUPPORT, hidden=config.hidden, compact=config.compact),
         run_log=RunLog(host.cache_dir, clock, VERSION),
         version=VERSION,
     )

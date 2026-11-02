@@ -63,14 +63,11 @@ def short_name(label: str, taken: Set[str]) -> str:
 class Presenter:
     def __init__(self, clock: Clock, tr: Translator, version: str, repo_url: str, warn: float,
                  crit: float, max_in_title: int, show_support: bool = False,
-                 hidden: Iterable[str] = (), compact: bool = False, offer_compact: bool = True):
-        """hidden: labels of the accounts left out of the bar title. compact: icon-only bar.
-        offer_compact: whether the menu has the collapse / expand item (not on Windows, whose
-        tray icon is always icon-only)."""
+                 hidden: Iterable[str] = (), compact: bool = False):
+        """hidden: labels of the accounts left out of the bar title. compact: icon-only bar."""
         self._clock = clock
         self._hidden = frozenset(hidden)
         self._compact = compact
-        self._offer_compact = offer_compact
         self._show_support = show_support
         self._tr = tr
         self._version = version
@@ -146,7 +143,7 @@ class Presenter:
         compact = self._compact or not shown
 
         items = list(update)
-        if self._offer_compact and self._compact:
+        if self._compact:
             # First in the menu: the way back from the icon-only bar.
             items += [MenuItem(tr("expand"), action=Action(COMPACT, value="off")), SEPARATOR]
         for r in rows:
@@ -159,7 +156,7 @@ class Presenter:
         ]
         if self._show_support:
             items.append(MenuItem(tr("support"), action=Action(OPEN, self._repo_url + "#support")))
-        if self._offer_compact and not self._compact:
+        if not self._compact:
             items.append(MenuItem(tr("collapse"), action=Action(COMPACT, value="on")))
         items += [
             self.language_item(),

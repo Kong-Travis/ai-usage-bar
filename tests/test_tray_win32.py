@@ -13,8 +13,14 @@ sys.path.insert(0, os.path.join(ROOT, "src"))
 from claude_usage import tray_win32 as tw  # noqa: E402  (must import without Windows)
 from claude_usage.i18n import Translator  # noqa: E402
 from claude_usage.tray import TrayBackend, TrayController  # noqa: E402
-from claude_usage.view import (OPEN, QUIT, REFRESH, Action, Menu, MenuItem, ORANGE, RED,  # noqa: E402
-                               SEPARATOR)
+from claude_usage.domain import AccountRow, Usage  # noqa: E402
+from claude_usage.view import (COMPACT, OPEN, QUIT, REFRESH, Action, Menu, MenuItem, ORANGE,  # noqa: E402
+                               RED, SEPARATOR, Presenter)
+
+
+class FakeClock:
+    def now(self):
+        return 0.0
 
 ON_WINDOWS = sys.platform == "win32"
 
@@ -99,6 +105,18 @@ class PureHelpers(unittest.TestCase):
         entries, _ = tw.win32_menu_entries((MenuItem("Show", checked=True, action=hide),))
         W = tw._W32
         self.assertEqual(entries, [(W.MF_STRING | W.MF_CHECKED, 1, "Show")])
+
+    def test_no_collapse_or_expand_item_since_the_icon_is_always_compact(self):
+        for compact in (False, True):
+            with self.subTest(compact=compact):
+                p = Presenter(FakeClock(), Translator("vi"), "1.3.2", "https://x.test", 70, 90, 3,
+                              compact=compact)
+                menu = p.present([AccountRow("C", "claude", "", Usage(1.0, 0, 2.0, 0), None)], None)
+                entries, actions = tw.win32_menu_entries(menu.items)
+                self.assertNotIn(COMPACT, [a.kind for a in actions.values()])
+                self.assertNotEqual(entries[0][0], tw._W32.MF_SEPARATOR)
+                flags = [e[0] for e in entries]
+                self.assertFalse(any(a == b == tw._W32.MF_SEPARATOR for a, b in zip(flags, flags[1:])))
 
     def test_backend_implements_every_abstract_method(self):
         self.assertTrue(issubclass(tw.Win32TrayBackend, TrayBackend))

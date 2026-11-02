@@ -1197,14 +1197,11 @@ def short_name(label: str, taken: Set[str]) -> str:
 class Presenter:
     def __init__(self, clock: Clock, tr: Translator, version: str, repo_url: str, warn: float,
                  crit: float, max_in_title: int, show_support: bool = False,
-                 hidden: Iterable[str] = (), compact: bool = False, offer_compact: bool = True):
-        """hidden: labels of the accounts left out of the bar title. compact: icon-only bar.
-        offer_compact: whether the menu has the collapse / expand item (not on Windows, whose
-        tray icon is always icon-only)."""
+                 hidden: Iterable[str] = (), compact: bool = False):
+        """hidden: labels of the accounts left out of the bar title. compact: icon-only bar."""
         self._clock = clock
         self._hidden = frozenset(hidden)
         self._compact = compact
-        self._offer_compact = offer_compact
         self._show_support = show_support
         self._tr = tr
         self._version = version
@@ -1280,7 +1277,7 @@ class Presenter:
         compact = self._compact or not shown
 
         items = list(update)
-        if self._offer_compact and self._compact:
+        if self._compact:
             # First in the menu: the way back from the icon-only bar.
             items += [MenuItem(tr("expand"), action=Action(COMPACT, value="off")), SEPARATOR]
         for r in rows:
@@ -1293,7 +1290,7 @@ class Presenter:
         ]
         if self._show_support:
             items.append(MenuItem(tr("support"), action=Action(OPEN, self._repo_url + "#support")))
-        if self._offer_compact and not self._compact:
+        if not self._compact:
             items.append(MenuItem(tr("collapse"), action=Action(COMPACT, value="on")))
         items += [
             self.language_item(),
@@ -1513,8 +1510,7 @@ def build(host: Host, clock: Clock = None, http: HttpClient = None) -> Services:
         identity=IdentityService(ProfileClient(http, endpoints.api), cache, EMAIL_EVERY),
         releases=releases,
         presenter=Presenter(clock, tr, VERSION, REPO_URL, WARN_PCT, CRIT_PCT, MAX_IN_TITLE,
-                            SHOW_SUPPORT, hidden=config.hidden, compact=config.compact,
-                            offer_compact=host.os_name != WINDOWS),
+                            SHOW_SUPPORT, hidden=config.hidden, compact=config.compact),
         run_log=RunLog(host.cache_dir, clock, VERSION),
         version=VERSION,
     )
@@ -2272,12 +2268,16 @@ def win32_menu_label(text: str) -> str:
 
 def win32_menu_entries(items: Sequence[MenuItem]) -> Tuple[List[Win32MenuEntry], Dict[int, Action]]:
     """Popup menu rows and the Action behind each command id. Items with an action get ids
-    1, 2, 3...; items without one are shown grayed and cannot be chosen."""
+    1, 2, 3...; items without one are shown grayed and cannot be chosen. The collapse / expand
+    item is left out: the notification-area icon is always icon-only."""
     entries: List[Win32MenuEntry] = []
     actions: Dict[int, Action] = {}
     for item in items:
+        if item.action is not None and item.action.kind == COMPACT:
+            continue
         if item.separator:
-            entries.append((_W32.MF_SEPARATOR, 0, ""))
+            if entries and entries[-1][0] != _W32.MF_SEPARATOR:  # no leading or double ones
+                entries.append((_W32.MF_SEPARATOR, 0, ""))
         elif item.action is not None:
             command = len(actions) + 1
             actions[command] = item.action

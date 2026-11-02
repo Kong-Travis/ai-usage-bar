@@ -209,10 +209,6 @@ class BarChoices(unittest.TestCase):
         self.assertEqual(menu.items[0].text, "Mở rộng (hiện số liệu)")
         self.assertNotIn("Thu gọn (chỉ hiện biểu tượng)", [i.text for i in menu.items])
 
-    def test_no_collapse_item_where_the_bar_is_always_an_icon(self):
-        texts = [i.text for i in self.present(self.rows()[:1], offer_compact=False).items]
-        self.assertNotIn("Thu gọn (chỉ hiện biểu tượng)", texts)
-
 
 class Footer(unittest.TestCase):
     def test_links_and_refresh(self):

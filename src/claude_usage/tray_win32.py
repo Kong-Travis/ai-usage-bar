@@ -15,7 +15,7 @@ from typing import Callable, Deque, Dict, List, Optional, Sequence, Tuple
 
 from .i18n import EN, VI, Translator
 from .tray import TrayBackend
-from .view import ORANGE, RED, Action, Menu, MenuItem
+from .view import COMPACT, ORANGE, RED, Action, Menu, MenuItem
 
 
 class _W32:
@@ -110,12 +110,16 @@ def win32_menu_label(text: str) -> str:
 
 def win32_menu_entries(items: Sequence[MenuItem]) -> Tuple[List[Win32MenuEntry], Dict[int, Action]]:
     """Popup menu rows and the Action behind each command id. Items with an action get ids
-    1, 2, 3...; items without one are shown grayed and cannot be chosen."""
+    1, 2, 3...; items without one are shown grayed and cannot be chosen. The collapse / expand
+    item is left out: the notification-area icon is always icon-only."""
     entries: List[Win32MenuEntry] = []
     actions: Dict[int, Action] = {}
     for item in items:
+        if item.action is not None and item.action.kind == COMPACT:
+            continue
         if item.separator:
-            entries.append((_W32.MF_SEPARATOR, 0, ""))
+            if entries and entries[-1][0] != _W32.MF_SEPARATOR:  # no leading or double ones
+                entries.append((_W32.MF_SEPARATOR, 0, ""))
         elif item.action is not None:
             command = len(actions) + 1
             actions[command] = item.action
