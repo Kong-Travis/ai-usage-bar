@@ -1716,8 +1716,9 @@ CLI_FLAGS = {REFRESH: "--force", UPDATE: "--update"}
 # Settings take one value: the language, the account label, or on / off.
 SETTING_FLAGS = {LANGUAGE: "--lang", SHOW_ACCOUNT: "--show", HIDE_ACCOUNT: "--hide",
                  COMPACT: "--compact"}
-# The icon of the compact bar. "speedometer" is the SF Symbols 1 name of "gauge", so it also
-# resolves on Big Sur, the oldest macOS with sfimage.
+# The icon of the compact bar. CoreGlyphs' name_availability.plist lists "speedometer" in the
+# 2019 set (macOS 10.15) and name_aliases.strings maps it to gauge.with.dots.needle.67percent,
+# so it resolves on Big Sur, the oldest macOS with sfimage, and on every later one.
 COMPACT_SFIMAGE, UPDATE_SFIMAGE = "speedometer", "arrow.down.circle"
 COMPACT_ARGOS_ICON = "utilities-system-monitor-symbolic"
 UPDATE_ARGOS_ICON = "software-update-available-symbolic"
