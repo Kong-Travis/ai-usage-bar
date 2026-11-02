@@ -23,3 +23,62 @@ Windows / Linux tray. See README.md for the module map.
 - Release: bump `VERSION` in `src/claude_usage/config.py`, `./build.sh`, run the tests, tag
   `vX.Y.Z`, publish a GitHub release with the files from `dist/`. Every install self-updates to
   it, so never tag before the tests pass.
+
+## Strategy (owner decision 2026-11-02)
+
+Goal: the fastest result for the fewest tokens, without losing confidence in real behaviour.
+
+### Git
+
+- Branch `main` only: no branches, no worktrees. Before writing any code, `git pull --rebase`
+  on `main`. When the task is done and verified, commit (Conventional Commits) and
+  `git push origin main` without asking; the owner authorized this for this repo. Then check
+  CI with `gh run watch`.
+- A push to `main` does not reach users: installs self-update only from the latest release tag
+  (`updater.py`). Tagging and publishing a release still waits for the owner's request.
+
+### Models and tokens
+
+- Fable is never used (workspace rule). Set `model:` explicitly on every agent.
+- Haiku: read-only searches and file sweeps, summarising logs or CI output, listing and
+  counting. Its answer must be cheap to check; escalate to Sonnet when it is wrong.
+- Sonnet: tests, clear-spec refactors, codemods, lint and dependency bumps.
+- Opus: planning, implementation, review, and every user-facing string in `i18n.py`.
+- Work inline when the task is a few tool calls with a known target; an agent costs a fresh
+  context. Brief each agent narrowly (goal, files, what is ruled out) and ask for conclusions,
+  not file dumps. Never run the same check twice, in an agent and inline.
+
+### Parallel agents
+
+- Run independent work as parallel agents in one message, each owning a disjoint set of files.
+  Natural lanes: `tray_win32.py`; `tray.py` and `tray_gtk.py`; `view.py`, `xbar.py` and
+  `i18n.py`; `sources.py` and `scan.py`; `usage.py` and `infra.py`; `updater.py`, `tools/`
+  and `installer/`. Each lane also owns its own `tests/test_<module>.py`.
+- Shared outputs belong to the main session only, after the lanes finish: `./build.sh`
+  (`plugin/claude-usage.1m.py`, `dist/`), `tests/golden/`, the git index, commit and push.
+
+### Tests
+
+- Write a test only where it catches real defects: business rules, conditional logic, parsing
+  and data transformations, percentage and reset-time maths, and every fixed bug. No tests of
+  trivial getters, implementation details or exact menu layout beyond the goldens, and no
+  heavy mocking: prefer the fakes in `tests/fakes.py` (FakeServer, a real HTTP server).
+- Prefer flow-level tests: account discovery -> probe -> cache -> menu, run through
+  `platform_setup.build` or the bundled plugin, over isolated unit tests.
+- Bug fix: reproduce it first end-to-end the way the user hits it, then pin it with a failing
+  test (flow level where practical), then fix.
+- When touching existing tests, delete or merge obsolete, duplicate and brittle ones instead of
+  adding more. Test count and coverage are not goals.
+
+### End-to-end verification (after every task, before the push)
+
+A passing unit suite is not enough. Check the flows the change touches:
+
+- macOS menu: run `/usr/bin/python3 plugin/claude-usage.1m.py` (and `--force`) with the real
+  accounts, read the output and `~/.cache/claude-usage/last-run.log`. Each probe spends a few
+  tokens of quota, so run it once per check, not in loops.
+- Linux tray, Argos output and installer: `bash tests/docker/run.sh` (Docker).
+- Windows tray and the three-OS suite: the CI run after the push.
+- Self-update: `tests/test_bundle.py` runs the real v1.2.2 updater against the new bundle.
+- Browser automation (Playwright MCP, headless) only where a flow has a web page, such as a
+  GitHub release page or README after a release.
