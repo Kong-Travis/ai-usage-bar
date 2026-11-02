@@ -123,5 +123,25 @@ class LanguageSwitch(unittest.TestCase):
             self.assertEqual(conf, "keychain = off\nwork = ~/tokens/work.txt\nlanguage = vi\n")
 
 
+class RejectedToken(unittest.TestCase):
+    """Bug fixed after v1.3.1: an expired token showed only "no rate-limit headers"."""
+
+    def test_the_menu_shows_the_api_reason_and_the_token_is_probed_once(self):
+        expired = "OAuth access token has expired. Re-authenticate to continue."
+        with FakeHome() as home:
+            home.write(".config/claude-usage.conf", CONF_NO_KEYCHAIN + "old = ~/t/old\n"
+                                                    "ok = ~/t/ok\n")
+            home.write("t/old", tok("OLD"))
+            home.write("t/ok", tok("OK"))
+            plans = {tok("OLD"): Plan(status=401, error=expired),
+                     tok("OK"): Plan({"5h": (0.1, HOUR), "7d": (0.2, DAY)})}
+            with FakeServer(plans) as server:
+                out = run_plugin(home, server, extra_env={"CLAUDE_USAGE_LANG": "en"})
+                probes = [r for r in server.requests if r[1] == "/v1/messages"]
+        self.assertIn("Error: RuntimeError: HTTP 401: " + expired, out)
+        self.assertIn("5-hour: 10%", out)  # the other account is unaffected
+        self.assertEqual(len(probes), 2)  # the rejected token is not retried on another model
+
+
 if __name__ == "__main__":
     unittest.main()

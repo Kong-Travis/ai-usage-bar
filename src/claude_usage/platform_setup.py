@@ -75,7 +75,7 @@ def build_sources(host: Host, config: UserConfig, clock: Clock, tr: Translator) 
         dirs = ConfigDirFinder(host.home, host.env.get("CLAUDE_CONFIG_DIR"), scanner, files)
         cred_files = CredentialsFileSource(dirs, clock, host.os_name == MACOS, tr)
         if host.os_name == MACOS:
-            sources.append(FallbackSource(KeychainSource(Keychain()), cred_files))
+            sources.append(FallbackSource(KeychainSource(Keychain(), clock, tr), cred_files))
         else:
             sources.append(cred_files)
     sources += [ShellTokenSource(files, scanner), EnvTokenSource(env_readers),

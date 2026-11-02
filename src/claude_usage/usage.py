@@ -6,7 +6,7 @@ import re
 from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
 from .domain import Account, ModelWindow, Usage
-from .infra import HttpClient, JsonCache
+from .infra import HttpClient, HttpResponse, JsonCache
 
 OAUTH_BETA = "oauth-2025-04-20"
 RATE_PREFIX = "anthropic-ratelimit-unified-"
@@ -51,6 +51,7 @@ class UsageProbe:
         self._model_windows = model_windows
 
     def probe(self, token: str) -> Usage:
+        last = None
         for model in self._models:
             body = json.dumps({
                 "model": model,
@@ -68,7 +69,23 @@ class UsageProbe:
                                    })
             if r.headers.get(RATE_PREFIX + "5h-utilization") is not None:
                 return parse_rate_headers(r.headers, self._model_windows)
-        raise RuntimeError("no rate-limit headers")
+            last = r
+            if r.status == 401:
+                break  # the token is rejected; another model will not change that
+        raise RuntimeError(probe_failure(last))
+
+
+def probe_failure(r: Optional[HttpResponse]) -> str:
+    """Why a probe got no usage: the API's own error message when it sent one."""
+    message = ""
+    if r is not None and r.body:
+        try:
+            message = str(r.json()["error"]["message"])
+        except (ValueError, KeyError, TypeError):
+            pass
+    if r is None or not message:
+        return "no rate-limit headers"
+    return "HTTP %d: %s" % (r.status, message)
 
 
 class ProfileClient:

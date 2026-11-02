@@ -10,12 +10,17 @@ import types
 import unittest
 
 from claude_usage.domain import LoginExpired, TokenAccount
+from claude_usage.i18n import Translator
 from claude_usage.scan import ShellScanner
 from claude_usage.sources import (AccountRegistry, ConfigDirFinder, ConfTokenSource,
                                   CredentialsFileAccount, CredentialsFileSource, EnvTokenSource,
                                   Keychain, KeychainAccount, KeychainSource, ShellFiles,
                                   ShellTokenSource, UserConfig, config_dir_label,
                                   is_posix_script, is_windows_script)
+
+
+def keychain_account(service, keychain, clock=None):
+    return KeychainAccount(service, keychain, clock or FakeClock(), Translator())
 
 
 def tok(name):
@@ -141,28 +146,49 @@ class KeychainTest(unittest.TestCase):
 
     def test_labels(self):
         kc = Keychain(run=FakeRun({}))
-        self.assertEqual(KeychainAccount("Claude Code-credentials", kc).label, "claude")
-        self.assertEqual(KeychainAccount("Claude Code-credentials-a1b2", kc).label, "claude (a1b2)")
+        self.assertEqual(keychain_account("Claude Code-credentials", kc).label, "claude")
+        self.assertEqual(keychain_account("Claude Code-credentials-a1b2", kc).label, "claude (a1b2)")
 
     def test_account_is_a_login_identified_by_its_service(self):
-        acc = KeychainAccount("Claude Code-credentials-x", Keychain(run=FakeRun({})))
+        acc = keychain_account("Claude Code-credentials-x", Keychain(run=FakeRun({})))
         self.assertTrue(acc.is_login)
         self.assertEqual(acc.identity, "Claude Code-credentials-x")
 
-    def test_token_is_read_from_the_keychain_json(self):
-        blob = json.dumps({"claudeAiOauth": {"accessToken": "ACCESS"}})
-        acc = KeychainAccount("Claude Code-credentials", Keychain(run=FakeRun({"find-generic-password": blob})))
+    def test_token_is_read_from_the_keychain_json_with_one_lookup(self):
+        run = FakeRun({"find-generic-password": creds(2_000_000)})
+        acc = keychain_account("Claude Code-credentials", Keychain(run=run))
         self.assertEqual(acc.token(), "ACCESS")
+        self.assertEqual(len(run.calls), 1)
+
+    def test_no_expiry_in_the_keychain_never_expires(self):
+        for blob in (creds(), creds(0)):
+            with self.subTest(blob=blob):
+                kc = Keychain(run=FakeRun({"find-generic-password": blob}))
+                self.assertEqual(keychain_account("Claude Code-credentials", kc).token(), "ACCESS")
+
+    def test_expired_keychain_login_raises_login_expired_with_the_renew_hint(self):
+        kc = Keychain(run=FakeRun({"find-generic-password": creds(500_000)}))
+        acc = keychain_account("Claude Code-credentials", kc, FakeClock(1000.0))
+        with self.assertRaises(LoginExpired) as cm:
+            acc.token()
+        self.assertEqual(str(cm.exception), Translator()("login_expired"))
 
     def test_a_locked_keychain_raises_on_token(self):
-        acc = KeychainAccount("Claude Code-credentials", Keychain(run=FakeRun({"find-generic-password": ""})))
+        acc = keychain_account("Claude Code-credentials", Keychain(run=FakeRun({"find-generic-password": ""})))
         with self.assertRaises(ValueError):
             acc.token()
 
     def test_source_lists_one_account_per_service_in_order(self):
-        src = KeychainSource(Keychain(run=FakeRun({"dump-keychain": DUMP})))
+        src = KeychainSource(Keychain(run=FakeRun({"dump-keychain": DUMP})), FakeClock(), Translator())
         self.assertEqual([a.label for a in src.accounts()],
                          ["claude", "claude (abc)", "claude (zzz)"])
+
+    def test_source_keeps_an_expired_login_so_its_row_can_say_how_to_renew(self):
+        run = FakeRun({"dump-keychain": DUMP, "find-generic-password": creds(500_000)})
+        accounts = KeychainSource(Keychain(run=run), FakeClock(1000.0), Translator()).accounts()
+        self.assertEqual(len(accounts), 3)
+        with self.assertRaises(LoginExpired):
+            accounts[0].token()
 
 
 class ConfigDirLabel(unittest.TestCase):

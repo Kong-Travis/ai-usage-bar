@@ -88,6 +88,22 @@ def set_conf_value(path: str, key: str, value: str) -> None:
     os.replace(tmp, path)
 
 
+# ---------- browser logins ----------
+
+def oauth_expired(oauth: dict, clock: Clock) -> bool:
+    """True when a login's access token is past its expiresAt (ms). No expiry: never expires."""
+    expires_ms = oauth.get("expiresAt") or 0
+    return bool(expires_ms) and expires_ms / 1000 < clock.now()
+
+
+def login_token(oauth: dict, clock: Clock, tr: Translator) -> str:
+    """The access token of a login, or LoginExpired: only Claude Code can renew it, and
+    probing with an expired token just returns 401."""
+    if oauth_expired(oauth, clock):
+        raise LoginExpired(tr("login_expired"))
+    return oauth["accessToken"]
+
+
 # ---------- macOS keychain ----------
 
 class Keychain:
@@ -111,26 +127,35 @@ class Keychain:
 class KeychainAccount(Account):
     is_login = True
 
-    def __init__(self, service: str, keychain: Keychain):
+    def __init__(self, service: str, keychain: Keychain, clock: Clock, tr: Translator):
         suffix = service[len(KEYCHAIN_SERVICE):].strip("-")
         super().__init__("claude (%s)" % suffix if suffix else "claude")
         self.service = service
         self._keychain = keychain
+        self._clock = clock
+        self._tr = tr
 
     @property
     def identity(self) -> str:
         return self.service
 
     def token(self) -> str:
-        return json.loads(self._keychain.password(self.service))["claudeAiOauth"]["accessToken"]
+        oauth = json.loads(self._keychain.password(self.service))["claudeAiOauth"]
+        return login_token(oauth, self._clock, self._tr)
 
 
 class KeychainSource:
-    def __init__(self, keychain: Keychain):
+    """Every Claude Code login in the keychain. Unlike the credentials-file fallback, an
+    expired one is kept: the keychain is the real store, so the row shows how to renew it."""
+
+    def __init__(self, keychain: Keychain, clock: Clock, tr: Translator):
         self._keychain = keychain
+        self._clock = clock
+        self._tr = tr
 
     def accounts(self) -> List[Account]:
-        return [KeychainAccount(s, self._keychain) for s in self._keychain.services(KEYCHAIN_SERVICE)]
+        return [KeychainAccount(s, self._keychain, self._clock, self._tr)
+                for s in self._keychain.services(KEYCHAIN_SERVICE)]
 
 
 # ---------- credentials files (Linux, Windows, macOS fallback) ----------
@@ -163,13 +188,10 @@ class CredentialsFileAccount(Account):
             return json.load(f)["claudeAiOauth"]
 
     def expired(self) -> bool:
-        expires_ms = self.oauth().get("expiresAt") or 0
-        return bool(expires_ms) and expires_ms / 1000 < self._clock.now()
+        return oauth_expired(self.oauth(), self._clock)
 
     def token(self) -> str:
-        if self.expired():
-            raise LoginExpired(self._tr("login_expired"))
-        return self.oauth()["accessToken"]
+        return login_token(self.oauth(), self._clock, self._tr)
 
 
 class CredentialsFileSource:

@@ -27,13 +27,16 @@ class Plan:
 
     windows: header suffix -> (utilization 0..1, reset offset in seconds from now),
     e.g. {"5h": (0.13, 8100), "7d": (0.08, 590400), "7d_oi": (0.01, 590400)}.
+    error: when set, /v1/messages answers `status` with this API error message and no usage
+    headers, the way the real API rejects an expired or revoked token.
     """
 
-    def __init__(self, windows=None, status=200, fable=True, email=None):
+    def __init__(self, windows=None, status=200, fable=True, email=None, error=None):
         self.windows = windows or {}
         self.status = status
         self.fable = fable
         self.email = email
+        self.error = error
 
 
 class FakeServer:
@@ -78,6 +81,10 @@ class FakeServer:
                 plan = server.plans.get(self._token())
                 if self.path != "/v1/messages" or plan is None:
                     self._send(401)
+                    return
+                if plan.error:
+                    self._send(plan.status, json.dumps({"type": "error", "error": {
+                        "type": "authentication_error", "message": plan.error}}).encode())
                     return
                 if "fable" in model and not plan.fable:
                     self._send(400)

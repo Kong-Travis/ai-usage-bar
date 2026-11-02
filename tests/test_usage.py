@@ -134,6 +134,23 @@ class UsageProbeTest(unittest.TestCase):
         self.assertEqual(str(cm.exception), "no rate-limit headers")
         self.assertEqual(len(http.requests), len(PROBE_MODELS))
 
+    def test_the_last_error_message_is_reported_when_every_model_fails(self):
+        def err(msg):
+            return json.dumps({"error": {"message": msg}}).encode()
+        probe, _ = self.probe(HttpResponse(400, body=err("first")),
+                              HttpResponse(529, body=err("Overloaded")))
+        with self.assertRaises(RuntimeError) as cm:
+            probe.probe("TOK")
+        self.assertEqual(str(cm.exception), "HTTP 529: Overloaded")
+
+    def test_an_unreadable_error_body_falls_back_to_the_plain_message(self):
+        for body in (b"<html>bad gateway</html>", b"\xff\xfe", b'{"error": "flat"}', b"[]"):
+            with self.subTest(body=body):
+                probe, _ = self.probe(HttpResponse(502, body=body), HttpResponse(502, body=body))
+                with self.assertRaises(RuntimeError) as cm:
+                    probe.probe("TOK")
+                self.assertEqual(str(cm.exception), "no rate-limit headers")
+
     def test_network_error_propagates(self):
         probe, _ = self.probe(OSError("down"))
         with self.assertRaises(OSError):
