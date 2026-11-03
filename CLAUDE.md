@@ -37,6 +37,12 @@ Goal: the fastest result for the fewest tokens, without losing confidence in rea
 - A push to `main` does not reach users: installs self-update only from the latest release tag
   (`updater.py`). Tagging and publishing a release still waits for the owner's request.
 
+### Reuse before write, SOLID
+
+- Before writing code, search `src/claude_usage/` for what already exists and extend it; write
+  new code only when nothing fits, and delete what the change leaves dead. Every unit honours
+  SOLID. No abstraction added for a hypothetical future.
+
 ### Models and tokens
 
 - Fable is never used (workspace rule). Set `model:` explicitly on every agent.
