@@ -11,11 +11,12 @@ from .tray import TrayBackend, TrayController, relaunch
 from .view import COMPACT, HIDE_ACCOUNT, LANGUAGE, SHOW_ACCOUNT, Action
 from .xbar import ARGOS, SETTING_FLAGS, SWIFTBAR, XbarRenderer
 
-USAGE = """usage: claude-usage [--force | --update | --tray | --lang vi|en | --show LABEL |
-                     --hide LABEL | --compact on|off]
+USAGE = """usage: claude-usage [--force | --update | --check-update | --tray | --lang vi|en |
+                     --show LABEL | --hide LABEL | --compact on|off]
   (none)          print the menu for SwiftBar (macOS) or Argos (GNOME)
   --force         probe every account now, ignoring the cache
   --update        install the latest release over this file
+  --check-update  ask GitHub for the latest release now (the menu then offers it)
   --tray          run as a tray icon (Windows, Linux desktops without Argos)
   --lang LANG     menu language: vi (default) or en
   --show LABEL    show this account in the bar title again
@@ -66,6 +67,7 @@ def run_tray(host: Host) -> None:
         build_menu=lambda force: build(host).app.menu(force=force),
         refresh=lambda: build(host).app.refresh(),
         update=services.updater.update,
+        check_update=lambda: build(host).app.newer_release(fresh=True),
         restart=relaunch,
         translator=lambda: build(host).tr,
         change_setting=lambda action: change_setting(host, action),
@@ -84,6 +86,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     host = Host.current()
     if args == ["--update"]:
         build(host).updater.update()
+    elif args == ["--check-update"]:
+        build(host).app.newer_release(fresh=True)
     elif args == ["--force"]:
         build(host).app.refresh()
     elif args == ["--tray"]:

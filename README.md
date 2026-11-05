@@ -53,7 +53,9 @@ distribution.
   "Thu gọn" / "Collapse to an icon" to show only an icon (orange or red when a limit is close),
   and "Mở rộng" / "Expand" at the top of the menu to bring the numbers back. On Windows the tray
   is always an icon, so there is no collapse item there.
-- New version available? The menu shows "Cập nhật ngay" / "Update now". One click updates it.
+- New version available? The menu checks GitHub every hour and then shows "Cập nhật ngay" /
+  "Update now". One click updates it. Click "Kiểm tra cập nhật" / "Check for updates" to check
+  at once instead of waiting.
 - Settings go in `~/.config/claude-usage.conf` (Windows: `%USERPROFILE%\.config\claude-usage.conf`),
   one per line:
 

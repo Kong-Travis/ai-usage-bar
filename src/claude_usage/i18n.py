@@ -30,6 +30,9 @@ CATALOG: Dict[str, Dict[str, str]] = {
                          EN: "New version {tag} (you have v{version})"},
     "update_now": {VI: "Cập nhật ngay", EN: "Update now"},
     "view_changes": {VI: "Xem thay đổi", EN: "What's new"},
+    "check_update": {VI: "Kiểm tra cập nhật", EN: "Check for updates"},
+    "check_update_done": {VI: "Kiểm tra cập nhật (đã là bản mới nhất)",
+                          EN: "Check for updates (up to date)"},
     "no_accounts": {VI: "Không tìm thấy tài khoản Claude Code nào",
                     EN: "No Claude Code account found"},
     "no_accounts_hint": {

@@ -12,7 +12,7 @@ REPO_URL = "https://github.com/" + REPO
 WARN_PCT, CRIT_PCT = 70, 90
 PROBE_EVERY = 180      # each probe costs a few tokens of quota
 EMAIL_EVERY = 86400
-UPDATE_EVERY = 6 * 3600
+UPDATE_EVERY = 3600  # one GitHub call an hour; the unauthenticated limit is 60 per IP
 MAX_IN_TITLE = 3
 # Fable first: only a Fable request returns the per-model weekly windows.
 PROBE_MODELS = ("claude-fable-5-1", "claude-haiku-5-5")

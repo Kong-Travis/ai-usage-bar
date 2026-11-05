@@ -3,11 +3,11 @@ from __future__ import annotations
 
 from typing import List
 
-from .view import (COMPACT, HIDE_ACCOUNT, LANGUAGE, OPEN, QUIT, REFRESH, SHOW_ACCOUNT, UPDATE, Menu,
+from .view import (CHECK_UPDATE, COMPACT, HIDE_ACCOUNT, LANGUAGE, OPEN, QUIT, REFRESH, SHOW_ACCOUNT, UPDATE, Menu,
                    MenuItem)
 
 SWIFTBAR, ARGOS = "swiftbar", "argos"
-CLI_FLAGS = {REFRESH: "--force", UPDATE: "--update"}
+CLI_FLAGS = {REFRESH: "--force", UPDATE: "--update", CHECK_UPDATE: "--check-update"}
 # Settings take one value: the language, the account label, or on / off.
 SETTING_FLAGS = {LANGUAGE: "--lang", SHOW_ACCOUNT: "--show", HIDE_ACCOUNT: "--hide",
                  COMPACT: "--compact"}

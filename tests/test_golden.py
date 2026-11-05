@@ -214,6 +214,37 @@ class RejectedToken(unittest.TestCase):
         self.assertEqual(len(probes), 2)  # the rejected token is not retried on another model
 
 
+class CheckForUpdates(unittest.TestCase):
+    """The menu's Check for updates asks GitHub at once instead of waiting for the hourly
+    check, then shows the newer release, or says this one is the latest."""
+
+    def run_with_cached_tag(self, latest, cached="v0.0.1"):
+        with FakeHome() as home:
+            home.write(".config/claude-usage.conf", CONF_NO_KEYCHAIN + "w = ~/t/w\n")
+            home.write("t/w", tok("W"))
+            home.write(".cache/claude-usage/update.json", '{"tag": "%s"}' % cached)
+            plans = {tok("W"): Plan({"5h": (0.1, HOUR), "7d": (0.2, DAY)})}
+            env = {"CLAUDE_USAGE_LANG": "en"}
+            with FakeServer(plans, latest_tag=latest) as server:
+                before = run_plugin(home, server, extra_env=env)
+                run_plugin(home, server, "--check-update", extra_env=env)
+                after = run_plugin(home, server, extra_env=env)
+        return before, after
+
+    def test_a_new_release_shows_up_without_waiting_for_the_hourly_check(self):
+        before, after = self.run_with_cached_tag("v9.9.9")
+        self.assertIn('Check for updates (up to date) | bash="<SELF>" param1=--check-update '
+                      'terminal=false refresh=true\n', before)
+        self.assertNotIn("New version", before)
+        self.assertIn("New version v9.9.9", after)
+        self.assertNotIn("Check for updates", after)  # Update now stands in for it
+
+    def test_no_newer_release_says_up_to_date(self):
+        _, after = self.run_with_cached_tag("v0.0.2", cached="v9.9.9")
+        self.assertIn("Check for updates (up to date) |", after)
+        self.assertNotIn("New version", after)
+
+
 class NoFiveHourLimit(unittest.TestCase):
     """Bug fixed after v1.3.2: a verified Ultra account has no 5-hour limit, so the API sends
     only the weekly headers, and the menu showed stale data with "no rate-limit headers"."""

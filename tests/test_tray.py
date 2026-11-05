@@ -9,7 +9,8 @@ from claude_usage.i18n import Translator
 from claude_usage.tray import (TRAY_REFRESH_SECONDS, TrayBackend, TrayController, error_menu,
                                loading_menu, quit_item, relaunch, relaunch_command, with_quit)
 from claude_usage.view import (COMPACT, HIDE_ACCOUNT, LANGUAGE, OPEN, QUIT, REFRESH, SEPARATOR,
-                               SHOW_ACCOUNT, UPDATE, Action, Menu, MenuItem)
+                               SHOW_ACCOUNT, UPDATE, CHECK_UPDATE, Action, Menu,
+                               MenuItem)
 
 VI = Translator("vi")
 REAL = Menu("C 1/2", None, False, 2.0, (MenuItem("row"), SEPARATOR, MenuItem("Làm mới ngay",
@@ -60,6 +61,8 @@ class Harness:
             self.build_calls.append(force)
             return REAL
 
+        self.events = []
+
         def refresh():
             self.refresh_calls += 1
 
@@ -75,6 +78,7 @@ class Harness:
             restart=restart,
             translator=self.translator,
             change_setting=self.settings.append,
+            check_update=lambda: self.events.append("check"),
             open_url=self.opened.append,
             spawn=spawn or (lambda fn: fn()),
         )
@@ -132,6 +136,12 @@ class ActionsTest(unittest.TestCase):
         h.controller.on_action(Action(UPDATE))
         self.assertEqual(h.backend.events, ["restart", "quit"])
         self.assertEqual(h.build_calls, [])
+
+    def test_check_for_updates_asks_github_then_redraws(self):
+        h = Harness()
+        h.controller.on_action(Action(CHECK_UPDATE))
+        self.assertEqual(h.events, ["check"])
+        self.assertEqual(h.build_calls, [False])
 
     def test_update_not_replaced_reloads(self):
         h = Harness(update=lambda: False)

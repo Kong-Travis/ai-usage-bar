@@ -393,7 +393,8 @@ class ControllerWiring(unittest.TestCase):
         controller = TrayController(backend, build_menu=lambda force: menu, refresh=lambda: None,
                                     update=lambda: False, restart=lambda: None,
                                     translator=lambda: Translator("en"),
-                                    change_setting=lambda action: None, spawn=lambda fn: fn())
+                                    change_setting=lambda action: None,
+                                    check_update=lambda: None, spawn=lambda fn: fn())
         quit_command = []
 
         def click_quit():
@@ -452,7 +453,8 @@ class RealWin32(unittest.TestCase):
         backend = Recording(mutex_name="Local\\claude-usage-bar-smoke-%d" % os.getpid())
         controller = TrayController(backend, build_menu=lambda force: menu, refresh=lambda: None,
                                     update=lambda: False, restart=lambda: None,
-                                    translator=Translator, change_setting=lambda action: None)
+                                    translator=Translator, change_setting=lambda action: None,
+                                    check_update=lambda: None)
         quitter = threading.Timer(2.0, lambda: backend.call_soon(backend.quit))
         watchdog = threading.Timer(30.0, lambda: os._exit(3))  # a missed quit must not hang CI
         quitter.start()

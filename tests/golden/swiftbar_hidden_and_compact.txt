@@ -18,4 +18,5 @@ Cập nhật mỗi 3 phút | color=gray size=11
 Thứ tự số: % giới hạn 5 giờ / tuần / Fable tuần | color=gray size=11
 Phiên bản v<VERSION> | color=gray size=11 href=https://github.com/Kong-Travis/claude-usage-bar
 Switch to English | bash="<SELF>" param1=--lang param2=en terminal=false refresh=true
+Kiểm tra cập nhật (đã là bản mới nhất) | bash="<SELF>" param1=--check-update terminal=false refresh=true
 Làm mới ngay | bash="<SELF>" param1=--force terminal=false refresh=true

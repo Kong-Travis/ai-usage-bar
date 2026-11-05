@@ -93,7 +93,8 @@ class FakeReleases:
     def __init__(self, tag):
         self.tag = tag
 
-    def latest(self):
+    def latest(self, fresh=False):
+        self.fresh = fresh
         return self.tag
 
 
@@ -101,8 +102,8 @@ class FakePresenter:
     def __init__(self):
         self.calls = []
 
-    def present(self, rows, tag):
-        self.calls.append((list(rows), tag))
+    def present(self, rows, tag, up_to_date=False):
+        self.calls.append((list(rows), tag, up_to_date))
         return "MENU"
 
 
@@ -124,7 +125,8 @@ class UsageAppTest(unittest.TestCase):
             "claude-work": (USAGE, None), "claude": (None, "Boom: x")})
         self.presenter = FakePresenter()
         self.run_log = RunLog(os.path.join(self.dir, "cache"), FakeClock(), version)
-        return UsageApp(FakeRegistry(accounts), self.usage, FakeIdentity(), FakeReleases(tag),
+        self.releases = FakeReleases(tag)
+        return UsageApp(FakeRegistry(accounts), self.usage, FakeIdentity(), self.releases,
                         self.presenter, self.run_log, version, mapper=map_parallel)
 
     def test_rows_keep_account_order_with_short_names_and_details(self):
@@ -157,8 +159,8 @@ class UsageAppTest(unittest.TestCase):
     def test_menu_offers_a_newer_tag(self):
         app = self.app(tag="v1.3.0")
         self.assertEqual(app.menu(), "MENU")
-        rows, tag = self.presenter.calls[0]
-        self.assertEqual(tag, "v1.3.0")
+        rows, tag, up_to_date = self.presenter.calls[0]
+        self.assertEqual((tag, up_to_date), ("v1.3.0", False))
         self.assertEqual(len(rows), 3)
 
     def test_menu_does_not_offer_the_same_or_an_older_tag(self):
@@ -166,7 +168,9 @@ class UsageAppTest(unittest.TestCase):
             with self.subTest(latest=latest):
                 app = self.app(tag=latest)
                 app.menu()
-                self.assertIsNone(self.presenter.calls[0][1])
+                _, tag, up_to_date = self.presenter.calls[0]
+                self.assertIsNone(tag)
+                self.assertEqual(up_to_date, latest is not None)  # None: GitHub never answered
 
     def test_menu_force_reaches_the_usage_service(self):
         app = self.app()
@@ -177,6 +181,9 @@ class UsageAppTest(unittest.TestCase):
         self.assertEqual(self.app(tag="v2.0.0").newer_release(), "v2.0.0")
         self.assertIsNone(self.app(tag="v1.2.2").newer_release())
         self.assertIsNone(self.app(tag=None).newer_release())
+        app = self.app(tag="v2.0.0")
+        app.newer_release(fresh=True)
+        self.assertTrue(self.releases.fresh)  # Check for updates skips the hourly cache
 
     def test_menu_writes_the_run_log_only_when_there_are_rows(self):
         app = self.app()

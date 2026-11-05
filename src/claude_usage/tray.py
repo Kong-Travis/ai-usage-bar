@@ -15,7 +15,8 @@ from dataclasses import replace
 from typing import Callable, List, Optional, Sequence
 
 from .i18n import Translator
-from .view import OPEN, QUIT, REFRESH, SETTINGS, UPDATE, Action, Menu, MenuItem, SEPARATOR
+from .view import (CHECK_UPDATE, OPEN, QUIT, REFRESH, SETTINGS, UPDATE, Action, Menu, MenuItem,
+                   SEPARATOR)
 
 TRAY_REFRESH_SECONDS = 60
 
@@ -58,6 +59,7 @@ class TrayController:
                  refresh: Callable[[], None], update: Callable[[], bool],
                  restart: Callable[[], None], translator: Callable[[], Translator],
                  change_setting: Callable[[Action], None],
+                 check_update: Callable[[], object],
                  open_url: Callable[[str], object] = webbrowser.open,
                  spawn: Callable[[Callable[[], None]], None] = None):
         """translator is called each time, so a language switch applies at once.
@@ -69,6 +71,7 @@ class TrayController:
         self._build_menu = build_menu
         self._refresh = refresh
         self._update = update
+        self._check_update = check_update
         self._restart = restart
         self._open_url = open_url
         self._spawn = spawn or _start_daemon_thread
@@ -117,6 +120,8 @@ class TrayController:
             self._open_url(action.url)
         elif action.kind == UPDATE:
             self._spawn(self._do_update)
+        elif action.kind == CHECK_UPDATE:
+            self._spawn(self._do_check_update)
         elif action.kind in SETTINGS:
             self._change_setting(action)
             self.reload()
@@ -134,6 +139,10 @@ class TrayController:
             self._backend.call_soon(self._restart_now)
         else:
             self.reload()
+
+    def _do_check_update(self) -> None:
+        self._check_update()  # never raises: offline, the last known answer stays
+        self.reload()
 
     def _restart_now(self) -> None:
         self._restart()

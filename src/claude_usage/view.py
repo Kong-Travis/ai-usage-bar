@@ -9,6 +9,7 @@ from .domain import AccountRow, Clock
 from .i18n import EN, VI, Translator
 
 REFRESH, UPDATE, OPEN, QUIT, LANGUAGE = "refresh", "update", "open", "quit", "language"
+CHECK_UPDATE = "check_update"  # ask GitHub for the latest release now, then redraw
 # Settings written to the conf file: show or hide one account in the bar title (value: its
 # label), and the icon-only bar (value: "on" or "off").
 SHOW_ACCOUNT, HIDE_ACCOUNT, COMPACT = "show_account", "hide_account", "compact"
@@ -18,7 +19,7 @@ GRAY, GREEN, ORANGE, RED = "gray", "#2e7d32", "orange", "red"
 
 @dataclass(frozen=True)
 class Action:
-    kind: str       # REFRESH | UPDATE | OPEN | QUIT | one of SETTINGS
+    kind: str       # REFRESH | UPDATE | CHECK_UPDATE | OPEN | QUIT | one of SETTINGS
     url: str = ""   # for OPEN
     value: str = ""  # for SETTINGS: the language, the account label, or "on" / "off"
 
@@ -113,8 +114,10 @@ class Presenter:
         target = EN if self._tr.lang == VI else VI
         return MenuItem(Translator(target)("switch_language"), action=Action(LANGUAGE, value=target))
 
-    def present(self, rows: Sequence[AccountRow], new_tag: Optional[str]) -> Menu:
-        """new_tag: the newer release to offer, or None."""
+    def present(self, rows: Sequence[AccountRow], new_tag: Optional[str],
+                up_to_date: bool = False) -> Menu:
+        """new_tag: the newer release to offer, or None. up_to_date: the last release check
+        found nothing newer (False when it could not tell)."""
         tr = self._tr
         update = self.update_items(new_tag)
         if not rows:
@@ -160,10 +163,11 @@ class Presenter:
             items.append(MenuItem(tr("support"), action=Action(OPEN, self._repo_url + "#support")))
         if not self._compact:
             items.append(MenuItem(tr("collapse"), action=Action(COMPACT, value="on")))
-        items += [
-            self.language_item(),
-            MenuItem(tr("refresh_now"), action=Action(REFRESH)),
-        ]
+        items.append(self.language_item())
+        if not new_tag:  # with a newer release, the update items at the top stand in for it
+            items.append(MenuItem(tr("check_update_done" if up_to_date else "check_update"),
+                                  action=Action(CHECK_UPDATE)))
+        items.append(MenuItem(tr("refresh_now"), action=Action(REFRESH)))
         return Menu(title, self.color(worst), bool(new_tag), worst if known else None, tuple(items),
                     compact)
 

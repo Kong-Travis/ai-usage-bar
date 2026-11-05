@@ -78,12 +78,15 @@ class UsageApp:
         rows = self.rows(force=force)
         if rows:
             self._run_log.write(rows)
-        return self._presenter.present(rows, tag if is_newer(tag, self._version) else None)
+        newer = is_newer(tag, self._version)
+        return self._presenter.present(rows, tag if newer else None,
+                                       up_to_date=tag is not None and not newer)
 
     def refresh(self) -> None:
         """Probe every account now, ignoring the cache."""
         self._map(lambda acc: self._usage.usage(acc, force=True), self._registry.accounts())
 
-    def newer_release(self) -> Optional[str]:
-        tag = self._releases.latest()
+    def newer_release(self, fresh: bool = False) -> Optional[str]:
+        """fresh: ask GitHub now (Check for updates) instead of trusting the hourly cache."""
+        tag = self._releases.latest(fresh=fresh)
         return tag if is_newer(tag, self._version) else None

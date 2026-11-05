@@ -150,7 +150,7 @@ REPO_URL = "https://github.com/" + REPO
 WARN_PCT, CRIT_PCT = 70, 90
 PROBE_EVERY = 180      # each probe costs a few tokens of quota
 EMAIL_EVERY = 86400
-UPDATE_EVERY = 6 * 3600
+UPDATE_EVERY = 3600  # one GitHub call an hour; the unauthenticated limit is 60 per IP
 MAX_IN_TITLE = 3
 # Fable first: only a Fable request returns the per-model weekly windows.
 PROBE_MODELS = ("claude-fable-5-1", "claude-haiku-5-5")
@@ -211,6 +211,9 @@ CATALOG: Dict[str, Dict[str, str]] = {
                          EN: "New version {tag} (you have v{version})"},
     "update_now": {VI: "Cập nhật ngay", EN: "Update now"},
     "view_changes": {VI: "Xem thay đổi", EN: "What's new"},
+    "check_update": {VI: "Kiểm tra cập nhật", EN: "Check for updates"},
+    "check_update_done": {VI: "Kiểm tra cập nhật (đã là bản mới nhất)",
+                          EN: "Check for updates (up to date)"},
     "no_accounts": {VI: "Không tìm thấy tài khoản Claude Code nào",
                     EN: "No Claude Code account found"},
     "no_accounts_hint": {
@@ -1165,6 +1168,7 @@ from typing import Iterable, List, Optional, Sequence, Set, Tuple
 
 
 REFRESH, UPDATE, OPEN, QUIT, LANGUAGE = "refresh", "update", "open", "quit", "language"
+CHECK_UPDATE = "check_update"  # ask GitHub for the latest release now, then redraw
 # Settings written to the conf file: show or hide one account in the bar title (value: its
 # label), and the icon-only bar (value: "on" or "off").
 SHOW_ACCOUNT, HIDE_ACCOUNT, COMPACT = "show_account", "hide_account", "compact"
@@ -1174,7 +1178,7 @@ GRAY, GREEN, ORANGE, RED = "gray", "#2e7d32", "orange", "red"
 
 @dataclass(frozen=True)
 class Action:
-    kind: str       # REFRESH | UPDATE | OPEN | QUIT | one of SETTINGS
+    kind: str       # REFRESH | UPDATE | CHECK_UPDATE | OPEN | QUIT | one of SETTINGS
     url: str = ""   # for OPEN
     value: str = ""  # for SETTINGS: the language, the account label, or "on" / "off"
 
@@ -1269,8 +1273,10 @@ class Presenter:
         target = EN if self._tr.lang == VI else VI
         return MenuItem(Translator(target)("switch_language"), action=Action(LANGUAGE, value=target))
 
-    def present(self, rows: Sequence[AccountRow], new_tag: Optional[str]) -> Menu:
-        """new_tag: the newer release to offer, or None."""
+    def present(self, rows: Sequence[AccountRow], new_tag: Optional[str],
+                up_to_date: bool = False) -> Menu:
+        """new_tag: the newer release to offer, or None. up_to_date: the last release check
+        found nothing newer (False when it could not tell)."""
         tr = self._tr
         update = self.update_items(new_tag)
         if not rows:
@@ -1316,10 +1322,11 @@ class Presenter:
             items.append(MenuItem(tr("support"), action=Action(OPEN, self._repo_url + "#support")))
         if not self._compact:
             items.append(MenuItem(tr("collapse"), action=Action(COMPACT, value="on")))
-        items += [
-            self.language_item(),
-            MenuItem(tr("refresh_now"), action=Action(REFRESH)),
-        ]
+        items.append(self.language_item())
+        if not new_tag:  # with a newer release, the update items at the top stand in for it
+            items.append(MenuItem(tr("check_update_done" if up_to_date else "check_update"),
+                                  action=Action(CHECK_UPDATE)))
+        items.append(MenuItem(tr("refresh_now"), action=Action(REFRESH)))
         return Menu(title, self.color(worst), bool(new_tag), worst if known else None, tuple(items),
                     compact)
 
@@ -1431,14 +1438,17 @@ class UsageApp:
         rows = self.rows(force=force)
         if rows:
             self._run_log.write(rows)
-        return self._presenter.present(rows, tag if is_newer(tag, self._version) else None)
+        newer = is_newer(tag, self._version)
+        return self._presenter.present(rows, tag if newer else None,
+                                       up_to_date=tag is not None and not newer)
 
     def refresh(self) -> None:
         """Probe every account now, ignoring the cache."""
         self._map(lambda acc: self._usage.usage(acc, force=True), self._registry.accounts())
 
-    def newer_release(self) -> Optional[str]:
-        tag = self._releases.latest()
+    def newer_release(self, fresh: bool = False) -> Optional[str]:
+        """fresh: ask GitHub now (Check for updates) instead of trusting the hourly cache."""
+        tag = self._releases.latest(fresh=fresh)
         return tag if is_newer(tag, self._version) else None
 
 
@@ -1605,6 +1615,7 @@ class TrayController:
                  refresh: Callable[[], None], update: Callable[[], bool],
                  restart: Callable[[], None], translator: Callable[[], Translator],
                  change_setting: Callable[[Action], None],
+                 check_update: Callable[[], object],
                  open_url: Callable[[str], object] = webbrowser.open,
                  spawn: Callable[[Callable[[], None]], None] = None):
         """translator is called each time, so a language switch applies at once.
@@ -1616,6 +1627,7 @@ class TrayController:
         self._build_menu = build_menu
         self._refresh = refresh
         self._update = update
+        self._check_update = check_update
         self._restart = restart
         self._open_url = open_url
         self._spawn = spawn or _start_daemon_thread
@@ -1664,6 +1676,8 @@ class TrayController:
             self._open_url(action.url)
         elif action.kind == UPDATE:
             self._spawn(self._do_update)
+        elif action.kind == CHECK_UPDATE:
+            self._spawn(self._do_check_update)
         elif action.kind in SETTINGS:
             self._change_setting(action)
             self.reload()
@@ -1681,6 +1695,10 @@ class TrayController:
             self._backend.call_soon(self._restart_now)
         else:
             self.reload()
+
+    def _do_check_update(self) -> None:
+        self._check_update()  # never raises: offline, the last known answer stays
+        self.reload()
 
     def _restart_now(self) -> None:
         self._restart()
@@ -1734,7 +1752,7 @@ from typing import List
 
 
 SWIFTBAR, ARGOS = "swiftbar", "argos"
-CLI_FLAGS = {REFRESH: "--force", UPDATE: "--update"}
+CLI_FLAGS = {REFRESH: "--force", UPDATE: "--update", CHECK_UPDATE: "--check-update"}
 # Settings take one value: the language, the account label, or on / off.
 SETTING_FLAGS = {LANGUAGE: "--lang", SHOW_ACCOUNT: "--show", HIDE_ACCOUNT: "--hide",
                  COMPACT: "--compact"}
@@ -1827,11 +1845,12 @@ import sys
 from typing import List, Optional
 
 
-USAGE = """usage: claude-usage [--force | --update | --tray | --lang vi|en | --show LABEL |
-                     --hide LABEL | --compact on|off]
+USAGE = """usage: claude-usage [--force | --update | --check-update | --tray | --lang vi|en |
+                     --show LABEL | --hide LABEL | --compact on|off]
   (none)          print the menu for SwiftBar (macOS) or Argos (GNOME)
   --force         probe every account now, ignoring the cache
   --update        install the latest release over this file
+  --check-update  ask GitHub for the latest release now (the menu then offers it)
   --tray          run as a tray icon (Windows, Linux desktops without Argos)
   --lang LANG     menu language: vi (default) or en
   --show LABEL    show this account in the bar title again
@@ -1882,6 +1901,7 @@ def run_tray(host: Host) -> None:
         build_menu=lambda force: build(host).app.menu(force=force),
         refresh=lambda: build(host).app.refresh(),
         update=services.updater.update,
+        check_update=lambda: build(host).app.newer_release(fresh=True),
         restart=relaunch,
         translator=lambda: build(host).tr,
         change_setting=lambda action: change_setting(host, action),
@@ -1900,6 +1920,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     host = Host.current()
     if args == ["--update"]:
         build(host).updater.update()
+    elif args == ["--check-update"]:
+        build(host).app.newer_release(fresh=True)
     elif args == ["--force"]:
         build(host).app.refresh()
     elif args == ["--tray"]:
