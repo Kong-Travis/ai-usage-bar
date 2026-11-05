@@ -45,15 +45,16 @@ class ModelWindow:
 
 @dataclass(frozen=True)
 class Usage:
-    """Plan usage of one account, in percent of each limit."""
-    five_hour: float
+    """Plan usage of one account, in percent of each limit. five_hour is None when the plan has
+    no 5-hour limit (a verified Ultra account)."""
+    five_hour: Optional[float]
     five_hour_reset: int
     weekly: float
     weekly_reset: int
     models: Tuple[ModelWindow, ...] = ()
 
-    def percentages(self) -> List[float]:
-        """5-hour %, weekly %, then each per-model weekly %."""
+    def percentages(self) -> List[Optional[float]]:
+        """5-hour % (None without that limit), weekly %, then each per-model weekly %."""
         return [self.five_hour, self.weekly] + [m.pct for m in self.models]
 
     def to_dict(self) -> Dict[str, Any]:
@@ -67,7 +68,8 @@ class Usage:
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> Usage:
         return cls(
-            five_hour=float(d["5h"]), five_hour_reset=int(d["5h_reset"]),
+            five_hour=None if d.get("5h") is None else float(d["5h"]),
+            five_hour_reset=int(d.get("5h_reset") or 0),
             weekly=float(d["7d"]), weekly_reset=int(d["7d_reset"]),
             models=tuple(ModelWindow(str(m["name"]), float(m["pct"]), int(m.get("reset") or 0))
                          for m in d.get("models", [])),
@@ -198,6 +200,7 @@ CATALOG: Dict[str, Dict[str, str]] = {
     "weekly": {VI: "Tuần", EN: "Weekly"},
     "model_weekly": {VI: "{name} (tuần)", EN: "{name} (weekly)"},
     "model_line": {VI: "{name}: {pct}%", EN: "{name}: {pct}%"},
+    "no_limit_line": {VI: "{name}: không giới hạn", EN: "{name}: no limit"},
     "reset_suffix": {VI: "  (reset {left})", EN: "  (resets {left})"},
     "left_now": {VI: "ngay bây giờ", EN: "now"},
     "left_prefix": {VI: "sau ", EN: "in "},
@@ -1006,10 +1009,10 @@ def parse_rate_headers(h: Mapping[str, str], model_windows: Mapping[str, str]) -
                 pct=float(h[name]) * 100,
                 reset=int(h.get(p + "7d_" + suffix + "-reset") or 0),
             ))
-    # A window that is not running (no request since it last reset) has no headers: the API
-    # stops sending 5h-* once the 5-hour window expires unused. It reads as 0%, reset unknown.
+    # A verified Ultra account has no 5-hour limit, so the API sends no 5h-* headers for it.
+    five = h.get(p + "5h-utilization")
     return Usage(
-        five_hour=float(h.get(p + "5h-utilization") or 0) * 100,
+        five_hour=None if five is None else float(five) * 100,
         five_hour_reset=int(h.get(p + "5h-reset") or 0),
         weekly=float(h.get(p + "7d-utilization") or 0) * 100,
         weekly_reset=int(h.get(p + "7d-reset") or 0),
@@ -1018,7 +1021,8 @@ def parse_rate_headers(h: Mapping[str, str], model_windows: Mapping[str, str]) -
 
 
 def has_usage(h: Mapping[str, str]) -> bool:
-    """Whether a response reports any usage window, e.g. only 7d-* when the 5-hour one is idle."""
+    """Whether a response reports any usage window, e.g. only 7d-* on a plan without a 5-hour
+    limit."""
     return any(name.startswith(RATE_PREFIX) and name.endswith("-utilization") for name in h)
 
 
@@ -1094,6 +1098,17 @@ def describe_error(e: Exception) -> str:
     return "%s: %s" % (type(e).__name__, str(e)[:160])
 
 
+def cached_usage(d: object) -> Optional[Usage]:
+    """A cache entry as Usage; None when missing or in a shape this version cannot read (one
+    written by another version), so a bad entry costs a probe, not the whole menu."""
+    if not d:
+        return None
+    try:
+        return Usage.from_dict(d)  # type: ignore[arg-type]
+    except (KeyError, TypeError, ValueError, AttributeError):
+        return None
+
+
 class UsageService:
     """Usage of an account, probed at most every max_age seconds. On failure it falls back
     to the last good result and reports the error alongside."""
@@ -1105,14 +1120,13 @@ class UsageService:
 
     def usage(self, account: Account, force: bool = False) -> Tuple[Optional[Usage], Optional[str]]:
         key = account.cache_key
-        cached = None if force else self._cache.fresh(key, self._max_age)
+        cached = None if force else cached_usage(self._cache.fresh(key, self._max_age))
         if cached:
-            return Usage.from_dict(cached), None
+            return cached, None
         try:
             usage = self._probe.probe(account.token())
         except Exception as e:
-            last = self._cache.load(key)
-            return (Usage.from_dict(last) if last else None), describe_error(e)
+            return cached_usage(self._cache.load(key)), describe_error(e)
         self._cache.save(key, usage.to_dict())
         return usage, None
 
@@ -1271,12 +1285,13 @@ class Presenter:
         # so a hidden account can be shown again.
         shown = [r for r in rows if r.label not in self._hidden]
         known = [r.usage for r in shown if r.usage]
-        worst = max([max(u.percentages()) for u in known] or [0])
+        worst = max([x for u in known for x in u.percentages() if x is not None] or [0])
         if not shown:
             title = "Claude"
         elif len(shown) <= self._max_in_title:
             title = "  ".join(
-                "%s %s" % (r.short, "/".join("%d" % round(x) for x in r.usage.percentages()))
+                "%s %s" % (r.short, "/".join("-" if x is None else "%d" % round(x)
+                                             for x in r.usage.percentages()))
                 if r.usage else r.short + " ?"
                 for r in shown)
         else:
@@ -1321,8 +1336,11 @@ class Presenter:
                        (tr("weekly"), u.weekly, u.weekly_reset)]
             windows += [(tr("model_weekly", name=m.name), m.pct, m.reset) for m in u.models]
             for name, pct, reset in windows:
+                if pct is None:  # the plan has no such limit
+                    items.append(MenuItem(tr("no_limit_line", name=name)))
+                    continue
                 text = tr("model_line", name=name, pct="%d" % round(pct))
-                if reset:  # 0: unknown, or the window is not running
+                if reset:  # 0: unknown
                     text += tr("reset_suffix", left=self.time_left(reset))
                 items.append(MenuItem(text, color=self.color(pct)))
             if r.error:

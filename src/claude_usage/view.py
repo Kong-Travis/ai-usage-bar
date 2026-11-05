@@ -129,12 +129,13 @@ class Presenter:
         # so a hidden account can be shown again.
         shown = [r for r in rows if r.label not in self._hidden]
         known = [r.usage for r in shown if r.usage]
-        worst = max([max(u.percentages()) for u in known] or [0])
+        worst = max([x for u in known for x in u.percentages() if x is not None] or [0])
         if not shown:
             title = "Claude"
         elif len(shown) <= self._max_in_title:
             title = "  ".join(
-                "%s %s" % (r.short, "/".join("%d" % round(x) for x in r.usage.percentages()))
+                "%s %s" % (r.short, "/".join("-" if x is None else "%d" % round(x)
+                                             for x in r.usage.percentages()))
                 if r.usage else r.short + " ?"
                 for r in shown)
         else:
@@ -179,8 +180,11 @@ class Presenter:
                        (tr("weekly"), u.weekly, u.weekly_reset)]
             windows += [(tr("model_weekly", name=m.name), m.pct, m.reset) for m in u.models]
             for name, pct, reset in windows:
+                if pct is None:  # the plan has no such limit
+                    items.append(MenuItem(tr("no_limit_line", name=name)))
+                    continue
                 text = tr("model_line", name=name, pct="%d" % round(pct))
-                if reset:  # 0: unknown, or the window is not running
+                if reset:  # 0: unknown
                     text += tr("reset_suffix", left=self.time_left(reset))
                 items.append(MenuItem(text, color=self.color(pct)))
             if r.error:

@@ -26,10 +26,10 @@ def parse_rate_headers(h: Mapping[str, str], model_windows: Mapping[str, str]) -
                 pct=float(h[name]) * 100,
                 reset=int(h.get(p + "7d_" + suffix + "-reset") or 0),
             ))
-    # A window that is not running (no request since it last reset) has no headers: the API
-    # stops sending 5h-* once the 5-hour window expires unused. It reads as 0%, reset unknown.
+    # A verified Ultra account has no 5-hour limit, so the API sends no 5h-* headers for it.
+    five = h.get(p + "5h-utilization")
     return Usage(
-        five_hour=float(h.get(p + "5h-utilization") or 0) * 100,
+        five_hour=None if five is None else float(five) * 100,
         five_hour_reset=int(h.get(p + "5h-reset") or 0),
         weekly=float(h.get(p + "7d-utilization") or 0) * 100,
         weekly_reset=int(h.get(p + "7d-reset") or 0),
@@ -38,7 +38,8 @@ def parse_rate_headers(h: Mapping[str, str], model_windows: Mapping[str, str]) -
 
 
 def has_usage(h: Mapping[str, str]) -> bool:
-    """Whether a response reports any usage window, e.g. only 7d-* when the 5-hour one is idle."""
+    """Whether a response reports any usage window, e.g. only 7d-* on a plan without a 5-hour
+    limit."""
     return any(name.startswith(RATE_PREFIX) and name.endswith("-utilization") for name in h)
 
 
@@ -114,6 +115,17 @@ def describe_error(e: Exception) -> str:
     return "%s: %s" % (type(e).__name__, str(e)[:160])
 
 
+def cached_usage(d: object) -> Optional[Usage]:
+    """A cache entry as Usage; None when missing or in a shape this version cannot read (one
+    written by another version), so a bad entry costs a probe, not the whole menu."""
+    if not d:
+        return None
+    try:
+        return Usage.from_dict(d)  # type: ignore[arg-type]
+    except (KeyError, TypeError, ValueError, AttributeError):
+        return None
+
+
 class UsageService:
     """Usage of an account, probed at most every max_age seconds. On failure it falls back
     to the last good result and reports the error alongside."""
@@ -125,14 +137,13 @@ class UsageService:
 
     def usage(self, account: Account, force: bool = False) -> Tuple[Optional[Usage], Optional[str]]:
         key = account.cache_key
-        cached = None if force else self._cache.fresh(key, self._max_age)
+        cached = None if force else cached_usage(self._cache.fresh(key, self._max_age))
         if cached:
-            return Usage.from_dict(cached), None
+            return cached, None
         try:
             usage = self._probe.probe(account.token())
         except Exception as e:
-            last = self._cache.load(key)
-            return (Usage.from_dict(last) if last else None), describe_error(e)
+            return cached_usage(self._cache.load(key)), describe_error(e)
         self._cache.save(key, usage.to_dict())
         return usage, None
 

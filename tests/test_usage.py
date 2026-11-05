@@ -89,12 +89,14 @@ class ParseRateHeaders(unittest.TestCase):
         u = parse_rate_headers(headers(), {})
         self.assertEqual(u.models, ())
 
-    def test_a_window_without_headers_is_idle_at_zero_with_reset_unknown(self):
+    def test_no_five_hour_headers_means_no_five_hour_limit_and_survives_the_cache(self):
         h = headers(seven=0.58)
         del h[P + "5h-utilization"], h[P + "5h-reset"]
         u = parse_rate_headers(h, {})
-        self.assertEqual((u.five_hour, u.five_hour_reset), (0.0, 0))
+        self.assertEqual((u.five_hour, u.five_hour_reset), (None, 0))
         self.assertAlmostEqual(u.weekly, 58.0)
+        self.assertIsNone(u.percentages()[0])
+        self.assertEqual(Usage.from_dict(json.loads(json.dumps(u.to_dict()))), u)
 
 
 class UsageProbeTest(unittest.TestCase):
@@ -233,6 +235,17 @@ class UsageServiceTest(CacheCase):
         svc.usage(self.account)
         self.clock.advance(200)
         self.assertEqual(svc.usage(self.account), (USAGE_B, None))
+
+    def test_an_unreadable_cache_entry_is_a_miss_not_a_crash(self):
+        # A cache written by another version (e.g. a newer "5h": null read by an older one) must
+        # not take the whole menu down: a fresh entry re-probes, a fallback entry is dropped.
+        for bad in ({"5h": "x"}, {"7d": 1}, []):
+            with self.subTest(bad=bad):
+                self.cache.save(self.account.cache_key, bad)
+                self.assertEqual(self.service(USAGE_A).usage(self.account), (USAGE_A, None))
+                self.cache.save(self.account.cache_key, bad)
+                self.assertEqual(self.service(ValueError("boom")).usage(self.account),
+                                 (None, "ValueError: boom"))
 
     def test_failure_falls_back_to_the_last_cache_with_error_text(self):
         svc = self.service(USAGE_A, ValueError("boom"))

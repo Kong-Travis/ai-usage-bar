@@ -19,6 +19,7 @@ CATALOG: Dict[str, Dict[str, str]] = {
     "weekly": {VI: "Tuần", EN: "Weekly"},
     "model_weekly": {VI: "{name} (tuần)", EN: "{name} (weekly)"},
     "model_line": {VI: "{name}: {pct}%", EN: "{name}: {pct}%"},
+    "no_limit_line": {VI: "{name}: không giới hạn", EN: "{name}: no limit"},
     "reset_suffix": {VI: "  (reset {left})", EN: "  (resets {left})"},
     "left_now": {VI: "ngay bây giờ", EN: "now"},
     "left_prefix": {VI: "sau ", EN: "in "},

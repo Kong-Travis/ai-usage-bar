@@ -214,21 +214,21 @@ class RejectedToken(unittest.TestCase):
         self.assertEqual(len(probes), 2)  # the rejected token is not retried on another model
 
 
-class IdleFiveHourWindow(unittest.TestCase):
-    """Bug fixed after v1.3.2: once an account's 5-hour window expires unused, the API sends
+class NoFiveHourLimit(unittest.TestCase):
+    """Bug fixed after v1.3.2: a verified Ultra account has no 5-hour limit, so the API sends
     only the weekly headers, and the menu showed stale data with "no rate-limit headers"."""
 
-    def test_the_menu_shows_the_weekly_usage_and_an_idle_five_hour_window(self):
+    def test_the_menu_shows_the_weekly_usage_and_no_five_hour_limit(self):
         with FakeHome() as home:
-            home.write(".config/claude-usage.conf", CONF_NO_KEYCHAIN + "idle = ~/t/idle\n")
-            home.write("t/idle", tok("IDLE"))
-            plans = {tok("IDLE"): Plan({"7d": (0.58, DAY), "7d_oi": (0.53, DAY)})}
+            home.write(".config/claude-usage.conf", CONF_NO_KEYCHAIN + "ultra = ~/t/ultra\n")
+            home.write("t/ultra", tok("ULTRA"))
+            plans = {tok("ULTRA"): Plan({"7d": (0.58, DAY), "7d_oi": (0.53, DAY)})}
             with FakeServer(plans) as server:
                 out = run_plugin(home, server, extra_env={"CLAUDE_USAGE_LANG": "en"})
         lines = out.splitlines()
-        self.assertEqual(lines[0], "I 0/58/53 |")
+        self.assertEqual(lines[0], "U -/58/53 |")
         self.assertNotIn("Error", out)
-        self.assertIn("5-hour: 0%", lines)  # no reset time: there is no window running
+        self.assertIn("5-hour: no limit", lines)
         self.assertIn("Weekly: 58%  (resets in 1d)", lines)
         self.assertIn("Fable (weekly): 53%  (resets in 1d)", lines)
 

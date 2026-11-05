@@ -27,15 +27,16 @@ class ModelWindow:
 
 @dataclass(frozen=True)
 class Usage:
-    """Plan usage of one account, in percent of each limit."""
-    five_hour: float
+    """Plan usage of one account, in percent of each limit. five_hour is None when the plan has
+    no 5-hour limit (a verified Ultra account)."""
+    five_hour: Optional[float]
     five_hour_reset: int
     weekly: float
     weekly_reset: int
     models: Tuple[ModelWindow, ...] = ()
 
-    def percentages(self) -> List[float]:
-        """5-hour %, weekly %, then each per-model weekly %."""
+    def percentages(self) -> List[Optional[float]]:
+        """5-hour % (None without that limit), weekly %, then each per-model weekly %."""
         return [self.five_hour, self.weekly] + [m.pct for m in self.models]
 
     def to_dict(self) -> Dict[str, Any]:
@@ -49,7 +50,8 @@ class Usage:
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> Usage:
         return cls(
-            five_hour=float(d["5h"]), five_hour_reset=int(d["5h_reset"]),
+            five_hour=None if d.get("5h") is None else float(d["5h"]),
+            five_hour_reset=int(d.get("5h_reset") or 0),
             weekly=float(d["7d"]), weekly_reset=int(d["7d_reset"]),
             models=tuple(ModelWindow(str(m["name"]), float(m["pct"]), int(m.get("reset") or 0))
                          for m in d.get("models", [])),
