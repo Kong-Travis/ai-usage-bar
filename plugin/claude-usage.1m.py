@@ -140,7 +140,7 @@ class AccountRow:
 from dataclasses import dataclass
 from typing import Mapping
 
-VERSION = "1.3.2"
+VERSION = "1.3.3"
 REPO = "Kong-Travis/claude-usage-bar"
 PLUGIN_PATH_IN_REPO = "plugin/claude-usage.1m.py"
 REPO_URL = "https://github.com/" + REPO
