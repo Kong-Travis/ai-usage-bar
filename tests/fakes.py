@@ -40,9 +40,11 @@ class Plan:
 
 
 class FakeServer:
-    def __init__(self, plans: dict[str, Plan] | None = None, latest_tag: str = "v0.0.1"):
+    def __init__(self, plans: dict[str, Plan] | None = None, latest_tag: str = "v0.0.1",
+                 plugin_code: str | None = None):
         self.plans = plans or {}
         self.latest_tag = latest_tag
+        self.plugin_code = plugin_code  # served as the raw plugin file at latest_tag
         self.requests: list[tuple[str, str, str]] = []  # (method, path, model or "")
         server = self
 
@@ -65,6 +67,9 @@ class FakeServer:
                 server.requests.append(("GET", self.path, ""))
                 if self.path.endswith("/releases/latest"):
                     self._send(200, json.dumps({"tag_name": server.latest_tag}).encode())
+                elif (server.plugin_code is not None
+                      and self.path.endswith("/%s/plugin/claude-usage.1m.py" % server.latest_tag)):
+                    self._send(200, server.plugin_code.encode("utf-8"))
                 elif self.path == "/api/oauth/profile":
                     plan = server.plans.get(self._token())
                     if plan and plan.email:

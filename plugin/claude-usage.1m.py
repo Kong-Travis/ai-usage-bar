@@ -921,9 +921,10 @@ class ReleaseChecker:
         self._cache = cache
         self._max_age = max_age
 
-    def latest(self) -> Optional[str]:
+    def latest(self, fresh: bool = False) -> Optional[str]:
+        """fresh: ask GitHub even within max_age; the cached tag stays the fallback."""
         cached = self._cache.load(UPDATE_CACHE)
-        if cached and self._cache.age(UPDATE_CACHE) < self._max_age:
+        if not fresh and cached and self._cache.age(UPDATE_CACHE) < self._max_age:
             return cached.get("tag")
         try:
             r = self._http.request(self._url, timeout=10,
@@ -955,8 +956,9 @@ class SelfUpdater:
         self._target = target
 
     def update(self) -> bool:
-        """True when the file was replaced."""
-        tag = self._checker.latest()
+        """True when the file was replaced. Asks GitHub afresh: the user asked to update, and
+        a release published since the last check must not be missed."""
+        tag = self._checker.latest(fresh=True)
         if not tag or not is_newer(tag, self._version):
             return False
         url = "%s/%s/%s/%s" % (self._raw, self._repo, tag, self._path_in_repo)

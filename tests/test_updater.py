@@ -88,6 +88,13 @@ class ReleaseCheckerTest(TempCase):
         self.clock.t += 4000
         self.assertEqual(c.latest(), "v1.4.0")
 
+    def test_fresh_asks_github_within_max_age_and_falls_back_when_it_fails(self):
+        c = self.checker(release("v1.3.0"), release("v1.4.0"), OSError("offline"))
+        c.latest()
+        self.assertEqual(c.latest(fresh=True), "v1.4.0")
+        self.assertEqual(c.latest(fresh=True), "v1.4.0")
+        self.assertEqual(len(self.http.requests), 3)
+
     def test_http_error_falls_back_to_the_cached_tag(self):
         c = self.checker(release("v1.3.0"), HttpResponse(403))
         c.latest()
@@ -114,7 +121,7 @@ class FakeChecker:
     def __init__(self, tag):
         self.tag = tag
 
-    def latest(self):
+    def latest(self, fresh=False):
         return self.tag
 
 

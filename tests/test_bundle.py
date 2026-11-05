@@ -9,7 +9,7 @@ import sys
 import tempfile
 import unittest
 
-from fakes import BUNDLE, ROOT, base_env
+from fakes import BUNDLE, ROOT, FakeHome, FakeServer, base_env, run_plugin
 
 OLD_RELEASE = "v1.2.2"
 
@@ -112,6 +112,26 @@ class OldReleaseCanUpdate(unittest.TestCase):
             self.assertIn("Claude ?", run.stdout)
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
+
+
+class UpdateNow(unittest.TestCase):
+    """Bug fixed after v1.3.3: `--update` trusted the 6-hour release cache, so right after a
+    release it found nothing newer and silently left the old plugin in place."""
+
+    def test_update_asks_github_even_when_the_release_cache_is_fresh(self):
+        with open(BUNDLE, encoding="utf-8") as f:
+            new = re.sub(r'(?m)^VERSION = "[^"]+"$', 'VERSION = "9.9.9"', f.read(), count=1)
+        with FakeHome() as home:
+            installed = home.write("swiftbar/claude-usage.1m.py", "")
+            shutil.copyfile(BUNDLE, installed)
+            home.write(".cache/claude-usage/update.json", '{"tag": "v0.0.1"}')  # checked just now
+            with FakeServer(latest_tag="v9.9.9", plugin_code=new) as server:
+                run_plugin(home, server, "--update", plugin=installed,
+                           extra_env={"CLAUDE_USAGE_GITHUB_RAW": server.url})
+            with open(installed, encoding="utf-8") as f:
+                self.assertEqual(f.read(), new)
+            with open(os.path.join(home.path, ".cache", "claude-usage", "update.json")) as f:
+                self.assertIn("v9.9.9", f.read())  # the menu stops offering the update
 
 
 if __name__ == "__main__":
