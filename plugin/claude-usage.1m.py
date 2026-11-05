@@ -197,7 +197,6 @@ CATALOG: Dict[str, Dict[str, str]] = {
     "five_hour": {VI: "5 giờ", EN: "5-hour"},
     "weekly": {VI: "Tuần", EN: "Weekly"},
     "model_weekly": {VI: "{name} (tuần)", EN: "{name} (weekly)"},
-    "usage_line": {VI: "{name}: {pct}%  (reset {left})", EN: "{name}: {pct}%  (resets {left})"},
     "model_line": {VI: "{name}: {pct}%", EN: "{name}: {pct}%"},
     "reset_suffix": {VI: "  (reset {left})", EN: "  (resets {left})"},
     "left_now": {VI: "ngay bây giờ", EN: "now"},
@@ -1005,13 +1004,20 @@ def parse_rate_headers(h: Mapping[str, str], model_windows: Mapping[str, str]) -
                 pct=float(h[name]) * 100,
                 reset=int(h.get(p + "7d_" + suffix + "-reset") or 0),
             ))
+    # A window that is not running (no request since it last reset) has no headers: the API
+    # stops sending 5h-* once the 5-hour window expires unused. It reads as 0%, reset unknown.
     return Usage(
-        five_hour=float(h[p + "5h-utilization"]) * 100,
-        five_hour_reset=int(h[p + "5h-reset"]),
-        weekly=float(h[p + "7d-utilization"]) * 100,
-        weekly_reset=int(h[p + "7d-reset"]),
+        five_hour=float(h.get(p + "5h-utilization") or 0) * 100,
+        five_hour_reset=int(h.get(p + "5h-reset") or 0),
+        weekly=float(h.get(p + "7d-utilization") or 0) * 100,
+        weekly_reset=int(h.get(p + "7d-reset") or 0),
         models=tuple(models),
     )
+
+
+def has_usage(h: Mapping[str, str]) -> bool:
+    """Whether a response reports any usage window, e.g. only 7d-* when the 5-hour one is idle."""
+    return any(name.startswith(RATE_PREFIX) and name.endswith("-utilization") for name in h)
 
 
 class UsageProbe:
@@ -1046,7 +1052,7 @@ class UsageProbe:
                                        "anthropic-version": "2023-06-01",
                                        "content-type": "application/json",
                                    })
-            if r.headers.get(RATE_PREFIX + "5h-utilization") is not None:
+            if has_usage(r.headers):
                 return parse_rate_headers(r.headers, self._model_windows)
             last = r
             if r.status == 401:
@@ -1309,15 +1315,14 @@ class Presenter:
         if u is None:
             items.append(MenuItem(tr("usage_unreadable"), color=GRAY))
         else:
-            for key, pct, reset in (("five_hour", u.five_hour, u.five_hour_reset),
-                                    ("weekly", u.weekly, u.weekly_reset)):
-                items.append(MenuItem(tr("usage_line", name=tr(key), pct="%d" % round(pct),
-                                         left=self.time_left(reset)), color=self.color(pct)))
-            for m in u.models:
-                text = tr("model_line", name=tr("model_weekly", name=m.name), pct="%d" % round(m.pct))
-                if m.reset:
-                    text += tr("reset_suffix", left=self.time_left(m.reset))
-                items.append(MenuItem(text, color=self.color(m.pct)))
+            windows = [(tr("five_hour"), u.five_hour, u.five_hour_reset),
+                       (tr("weekly"), u.weekly, u.weekly_reset)]
+            windows += [(tr("model_weekly", name=m.name), m.pct, m.reset) for m in u.models]
+            for name, pct, reset in windows:
+                text = tr("model_line", name=name, pct="%d" % round(pct))
+                if reset:  # 0: unknown, or the window is not running
+                    text += tr("reset_suffix", left=self.time_left(reset))
+                items.append(MenuItem(text, color=self.color(pct)))
             if r.error:
                 items.append(MenuItem(tr("stale_data"), color=GRAY, size=11))
         if r.error:

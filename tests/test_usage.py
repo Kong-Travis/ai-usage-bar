@@ -89,11 +89,12 @@ class ParseRateHeaders(unittest.TestCase):
         u = parse_rate_headers(headers(), {})
         self.assertEqual(u.models, ())
 
-    def test_missing_required_header_raises(self):
-        h = headers()
-        del h[P + "7d-reset"]
-        with self.assertRaises(KeyError):
-            parse_rate_headers(h, {})
+    def test_a_window_without_headers_is_idle_at_zero_with_reset_unknown(self):
+        h = headers(seven=0.58)
+        del h[P + "5h-utilization"], h[P + "5h-reset"]
+        u = parse_rate_headers(h, {})
+        self.assertEqual((u.five_hour, u.five_hour_reset), (0.0, 0))
+        self.assertAlmostEqual(u.weekly, 58.0)
 
 
 class UsageProbeTest(unittest.TestCase):

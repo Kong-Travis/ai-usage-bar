@@ -175,15 +175,14 @@ class Presenter:
         if u is None:
             items.append(MenuItem(tr("usage_unreadable"), color=GRAY))
         else:
-            for key, pct, reset in (("five_hour", u.five_hour, u.five_hour_reset),
-                                    ("weekly", u.weekly, u.weekly_reset)):
-                items.append(MenuItem(tr("usage_line", name=tr(key), pct="%d" % round(pct),
-                                         left=self.time_left(reset)), color=self.color(pct)))
-            for m in u.models:
-                text = tr("model_line", name=tr("model_weekly", name=m.name), pct="%d" % round(m.pct))
-                if m.reset:
-                    text += tr("reset_suffix", left=self.time_left(m.reset))
-                items.append(MenuItem(text, color=self.color(m.pct)))
+            windows = [(tr("five_hour"), u.five_hour, u.five_hour_reset),
+                       (tr("weekly"), u.weekly, u.weekly_reset)]
+            windows += [(tr("model_weekly", name=m.name), m.pct, m.reset) for m in u.models]
+            for name, pct, reset in windows:
+                text = tr("model_line", name=name, pct="%d" % round(pct))
+                if reset:  # 0: unknown, or the window is not running
+                    text += tr("reset_suffix", left=self.time_left(reset))
+                items.append(MenuItem(text, color=self.color(pct)))
             if r.error:
                 items.append(MenuItem(tr("stale_data"), color=GRAY, size=11))
         if r.error:

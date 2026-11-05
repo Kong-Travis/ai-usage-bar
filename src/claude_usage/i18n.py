@@ -18,7 +18,6 @@ CATALOG: Dict[str, Dict[str, str]] = {
     "five_hour": {VI: "5 giờ", EN: "5-hour"},
     "weekly": {VI: "Tuần", EN: "Weekly"},
     "model_weekly": {VI: "{name} (tuần)", EN: "{name} (weekly)"},
-    "usage_line": {VI: "{name}: {pct}%  (reset {left})", EN: "{name}: {pct}%  (resets {left})"},
     "model_line": {VI: "{name}: {pct}%", EN: "{name}: {pct}%"},
     "reset_suffix": {VI: "  (reset {left})", EN: "  (resets {left})"},
     "left_now": {VI: "ngay bây giờ", EN: "now"},
