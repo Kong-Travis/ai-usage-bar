@@ -134,8 +134,9 @@ class Presenter:
             title = "Claude"
         elif len(shown) <= self._max_in_title:
             title = "  ".join(
-                "%s %s" % (r.short, "/".join("-" if x is None else "%d" % round(x)
-                                             for x in r.usage.percentages()))
+                # A limit the plan does not have is left out, never written as 0.
+                "%s %s" % (r.short, "/".join("%d" % round(x) for x in r.usage.percentages()
+                                             if x is not None))
                 if r.usage else r.short + " ?"
                 for r in shown)
         else:

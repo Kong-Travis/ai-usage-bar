@@ -226,7 +226,7 @@ class NoFiveHourLimit(unittest.TestCase):
             with FakeServer(plans) as server:
                 out = run_plugin(home, server, extra_env={"CLAUDE_USAGE_LANG": "en"})
         lines = out.splitlines()
-        self.assertEqual(lines[0], "U -/58/53 |")
+        self.assertEqual(lines[0], "U 58/53 |")  # no 5-hour number, not a 0
         self.assertNotIn("Error", out)
         self.assertIn("5-hour: no limit", lines)
         self.assertIn("Weekly: 58%  (resets in 1d)", lines)
