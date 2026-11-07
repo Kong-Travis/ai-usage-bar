@@ -10,7 +10,7 @@ import os
 import time
 import unittest
 
-from fakes import FakeHome, FakeServer, Plan, run_plugin, tok
+from fakes import FakeHome, FakeServer, Plan, claude_usage, run_plugin, tok
 
 GOLDEN = os.path.join(os.path.dirname(os.path.abspath(__file__)), "golden")
 HOUR, DAY = 3600, 86400
@@ -50,8 +50,7 @@ def scenario_many_accounts_and_stale(home: FakeHome):
     key = hashlib.sha256(tok("B1").encode()).hexdigest()[:16]
     now = int(time.time())
     p = home.write(".cache/claude-usage/%s.json" % key, json.dumps(
-        {"5h": 10.0, "5h_reset": now + 3 * HOUR, "7d": 20.0, "7d_reset": now + 3 * DAY,
-         "models": []}))
+        claude_usage(10.0, now + 3 * HOUR, 20.0, now + 3 * DAY).to_dict()))
     os.utime(p, (now - 3600, now - 3600))
     win = {"5h": (0.1, HOUR + 30), "7d": (0.2, DAY + 30)}
     return {tok("A1"): Plan(win), tok("A2"): Plan(win), tok("A3"): Plan(win),

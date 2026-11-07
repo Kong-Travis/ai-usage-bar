@@ -8,7 +8,8 @@ import time
 import unittest
 
 from claude_usage.config import MODEL_WINDOWS, PROBE_MODELS
-from claude_usage.domain import Account, ModelWindow, TokenAccount, Usage
+from claude_usage.domain import CLAUDE, Account, ClaudeAccount, TokenAccount, Usage
+from fakes import claude_usage
 from claude_usage.infra import HttpResponse, JsonCache
 from claude_usage.usage import (OAUTH_BETA, RATE_PREFIX, IdentityService, ProfileClient,
                                 UsageProbe, UsageService, describe_error, parse_rate_headers)
@@ -53,33 +54,41 @@ class FakeHttp:
         return r
 
 
+def five(u):
+    return u.windows[0]
+
+
+def weekly(u):
+    return u.windows[1]
+
+
+def models(u):
+    return u.windows[2:]
+
+
 class ParseRateHeaders(unittest.TestCase):
     def test_plain_windows(self):
         u = parse_rate_headers(headers(), MODEL_WINDOWS)
-        self.assertAlmostEqual(u.five_hour, 13.0)
-        self.assertEqual(u.five_hour_reset, 1000)
-        self.assertAlmostEqual(u.weekly, 8.0)
-        self.assertEqual(u.weekly_reset, 2000)
-        self.assertEqual(u.models, ())
+        self.assertEqual(u, claude_usage(13.0, 1000, 8.0, 2000))
 
     def test_per_model_window_uses_the_configured_name(self):
         u = parse_rate_headers(headers(models={"oi": (0.01, 3000)}), MODEL_WINDOWS)
-        self.assertEqual(u.models, (ModelWindow("Fable", 1.0, 3000),))
+        self.assertEqual(u, claude_usage(13.0, 1000, 8.0, 2000, [("Fable", 1.0, 3000)]))
         self.assertEqual(MODEL_WINDOWS["oi"], "Fable")
 
     def test_unknown_model_suffix_keeps_the_suffix(self):
         u = parse_rate_headers(headers(models={"xy": (0.5, 10)}), MODEL_WINDOWS)
-        self.assertEqual([m.name for m in u.models], ["xy"])
-        self.assertAlmostEqual(u.models[0].pct, 50.0)
+        self.assertEqual([m.name for m in models(u)], ["xy"])
+        self.assertAlmostEqual(models(u)[0].pct, 50.0)
 
     def test_model_without_reset_header_has_reset_zero(self):
         u = parse_rate_headers(headers(models={"oi": (0.2, None)}), MODEL_WINDOWS)
-        self.assertEqual(u.models[0].reset, 0)
+        self.assertEqual(models(u)[0].reset, 0)
 
     def test_custom_naming_and_percentages_order(self):
         u = parse_rate_headers(headers(five=0.1, seven=0.2, models={"a": (0.3, 1), "b": (0.4, 2)}),
                                {"a": "Alpha"})
-        self.assertEqual(sorted(m.name for m in u.models), ["Alpha", "b"])
+        self.assertEqual(sorted(m.name for m in models(u)), ["Alpha", "b"])
         got = u.percentages()
         self.assertEqual(len(got), 4)
         self.assertAlmostEqual(got[0], 10.0)
@@ -87,14 +96,14 @@ class ParseRateHeaders(unittest.TestCase):
 
     def test_the_weekly_header_is_not_mistaken_for_a_model(self):
         u = parse_rate_headers(headers(), {})
-        self.assertEqual(u.models, ())
+        self.assertEqual(models(u), ())
 
     def test_no_five_hour_headers_means_no_five_hour_limit_and_survives_the_cache(self):
         h = headers(seven=0.58)
         del h[P + "5h-utilization"], h[P + "5h-reset"]
         u = parse_rate_headers(h, {})
-        self.assertEqual((u.five_hour, u.five_hour_reset), (None, 0))
-        self.assertAlmostEqual(u.weekly, 58.0)
+        self.assertEqual((five(u).pct, five(u).reset), (None, 0))
+        self.assertAlmostEqual(weekly(u).pct, 58.0)
         self.assertIsNone(u.percentages()[0])
         self.assertEqual(Usage.from_dict(json.loads(json.dumps(u.to_dict()))), u)
 
@@ -109,7 +118,7 @@ class UsageProbeTest(unittest.TestCase):
     def test_first_model_with_headers_wins_and_request_is_well_formed(self):
         probe, http = self.probe(HttpResponse(200, headers(models={"oi": (0.01, 5)})))
         u = probe.probe("TOK")
-        self.assertEqual([m.name for m in u.models], ["Fable"])
+        self.assertEqual([m.name for m in models(u)], ["Fable"])
         self.assertEqual(len(http.requests), 1)
         r = http.requests[0]
         self.assertEqual(r["url"], self.API + "/v1/messages")
@@ -122,12 +131,12 @@ class UsageProbeTest(unittest.TestCase):
     def test_falls_back_to_the_next_model_when_there_are_no_headers(self):
         probe, http = self.probe(HttpResponse(400), HttpResponse(200, headers()))
         u = probe.probe("TOK")
-        self.assertAlmostEqual(u.five_hour, 13.0)
+        self.assertAlmostEqual(five(u).pct, 13.0)
         self.assertEqual([r["body"]["model"] for r in http.requests], list(PROBE_MODELS))
 
     def test_rate_limited_response_with_headers_is_accepted(self):
         probe, http = self.probe(HttpResponse(429, headers(five=0.95)))
-        self.assertAlmostEqual(probe.probe("TOK").five_hour, 95.0)
+        self.assertAlmostEqual(five(probe.probe("TOK")).pct, 95.0)
         self.assertEqual(len(http.requests), 1)
 
     def test_no_headers_anywhere_raises(self):
@@ -190,6 +199,9 @@ class FakeProbe:
         self.results = list(results)
         self.tokens = []
 
+    def read(self, account):
+        return self.probe(account.token())
+
     def probe(self, token):
         self.tokens.append(token)
         r = self.results.pop(0)
@@ -198,8 +210,8 @@ class FakeProbe:
         return r
 
 
-USAGE_A = Usage(10.0, 111, 20.0, 222, (ModelWindow("Fable", 5.0, 333),))
-USAGE_B = Usage(30.0, 444, 40.0, 555)
+USAGE_A = claude_usage(10.0, 111, 20.0, 222, [("Fable", 5.0, 333)])
+USAGE_B = claude_usage(30.0, 444, 40.0, 555)
 
 
 class UsageServiceTest(CacheCase):
@@ -209,7 +221,7 @@ class UsageServiceTest(CacheCase):
 
     def service(self, *results):
         self.probe = FakeProbe(*results)
-        return UsageService(self.probe, self.cache, 180)
+        return UsageService({CLAUDE: self.probe}, self.cache, 180)
 
     def test_first_call_probes_and_caches(self):
         svc = self.service(USAGE_A)
@@ -284,7 +296,7 @@ class UsageServiceTest(CacheCase):
         self.assertEqual(describe_error(ValueError("x" * 500)), "ValueError: " + "x" * 160)
 
 
-class FakeLogin(Account):
+class FakeLogin(ClaudeAccount):
     is_login = True
     identity = "login-1"
 

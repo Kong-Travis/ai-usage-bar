@@ -14,6 +14,7 @@ from claude_usage import tray_win32 as tw  # noqa: E402  (must import without Wi
 from claude_usage.i18n import Translator  # noqa: E402
 from claude_usage.tray import TrayBackend, TrayController  # noqa: E402
 from claude_usage.domain import AccountRow, Usage  # noqa: E402
+from fakes import claude_usage  # noqa: E402
 from claude_usage.view import (COMPACT, OPEN, QUIT, REFRESH, Action, Menu, MenuItem, ORANGE,  # noqa: E402
                                RED, SEPARATOR, Presenter)
 
@@ -111,7 +112,7 @@ class PureHelpers(unittest.TestCase):
             with self.subTest(compact=compact):
                 p = Presenter(FakeClock(), Translator("vi"), "1.3.2", "https://x.test", 70, 90, 3,
                               compact=compact)
-                menu = p.present([AccountRow("C", "claude", "", Usage(1.0, 0, 2.0, 0), None)], None)
+                menu = p.present([AccountRow("C", "claude", "", claude_usage(1.0, 0, 2.0, 0), None)], None)
                 entries, actions = tw.win32_menu_entries(menu.items)
                 self.assertNotIn(COMPACT, [a.kind for a in actions.values()])
                 self.assertNotEqual(entries[0][0], tw._W32.MF_SEPARATOR)

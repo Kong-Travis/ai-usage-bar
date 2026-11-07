@@ -10,6 +10,7 @@ import unittest
 
 from claude_usage.app import RunLog, UsageApp, map_parallel
 from claude_usage.domain import AccountRow, TokenAccount, Usage
+from fakes import claude_usage
 
 NOW = 1_700_000_000
 
@@ -107,7 +108,7 @@ class FakePresenter:
         return "MENU"
 
 
-USAGE = Usage(10.0, NOW + 60, 20.0, NOW + 120)
+USAGE = claude_usage(10.0, NOW + 60, 20.0, NOW + 120)
 
 
 class UsageAppTest(unittest.TestCase):

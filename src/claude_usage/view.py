@@ -5,7 +5,7 @@ import re
 from dataclasses import dataclass
 from typing import Iterable, List, Optional, Sequence, Set, Tuple
 
-from .domain import AccountRow, Clock
+from .domain import AGY, CLAUDE, CODEX, FIVE_HOUR, WEEKLY, AccountRow, Clock, Window
 from .i18n import EN, VI, Translator
 
 REFRESH, UPDATE, OPEN, QUIT, LANGUAGE = "refresh", "update", "open", "quit", "language"
@@ -48,14 +48,26 @@ class Menu:
     compact: bool = False
 
 
-def short_name(label: str, taken: Set[str]) -> str:
-    """One letter per account (C, T, W...), with a digit when letters collide."""
-    # "claude-token" -> T, "claude (work)" -> W; plain "claude" keeps its C.
-    base = re.sub(r"^claude[\s(_.-]*", "", label, flags=re.I) or label
-    s = base[:1].upper() or "?"
-    n = 2
+# Bar-title prefix of each provider's accounts: Claude keeps its plain letters (C, T, W...).
+SHORT_PREFIX = {CLAUDE: "", CODEX: "Cx", AGY: "Ag"}
+
+
+def short_name(label: str, taken: Set[str], provider: str = CLAUDE) -> str:
+    """A short bar-title name per account, unique across all accounts.
+
+    Claude: one letter ("claude-token" -> T, "claude (work)" -> W, plain "claude" keeps its C).
+    Other providers: their prefix plus the label's first letter after the provider name
+    ("codex" -> Cx, "codex-work" -> CxW, "agy" -> Ag). A digit is added when names collide.
+    """
+    prefix = SHORT_PREFIX.get(provider, "")
+    base = re.sub(r"^%s[\s(_.-]*" % (provider if prefix else "claude"), "", label, flags=re.I)
+    if prefix:
+        first = base[:1].upper()
+    else:
+        first = (base or label)[:1].upper() or "?"
+    s, n = prefix + first, 2
     while s in taken:
-        s = base[:1].upper() + str(n)
+        s = prefix + first + str(n)
         n += 1
     taken.add(s)
     return s
@@ -171,6 +183,14 @@ class Presenter:
         return Menu(title, self.color(worst), bool(new_tag), worst if known else None, tuple(items),
                     compact)
 
+    def window_name(self, w: Window) -> str:
+        tr = self._tr
+        if w.kind == FIVE_HOUR and not w.name:
+            return tr("five_hour")
+        if w.kind == WEEKLY:
+            return tr("model_weekly", name=w.name) if w.name else tr("weekly")
+        return "%s (%s)" % (w.name, w.kind) if w.name else w.kind
+
     def account_items(self, r: AccountRow) -> List[MenuItem]:
         head = "%s: %s" % (r.short, r.label)
         if r.detail:
@@ -181,17 +201,15 @@ class Presenter:
         if u is None:
             items.append(MenuItem(tr("usage_unreadable"), color=GRAY))
         else:
-            windows = [(tr("five_hour"), u.five_hour, u.five_hour_reset),
-                       (tr("weekly"), u.weekly, u.weekly_reset)]
-            windows += [(tr("model_weekly", name=m.name), m.pct, m.reset) for m in u.models]
-            for name, pct, reset in windows:
-                if pct is None:  # the plan has no such limit
+            for w in u.windows:
+                name = self.window_name(w)
+                if w.pct is None:  # the plan has no such limit
                     items.append(MenuItem(tr("no_limit_line", name=name)))
                     continue
-                text = tr("model_line", name=name, pct="%d" % round(pct))
-                if reset:  # 0: unknown
-                    text += tr("reset_suffix", left=self.time_left(reset))
-                items.append(MenuItem(text, color=self.color(pct)))
+                text = tr("model_line", name=name, pct="%d" % round(w.pct))
+                if w.reset:  # 0: unknown
+                    text += tr("reset_suffix", left=self.time_left(w.reset))
+                items.append(MenuItem(text, color=self.color(w.pct)))
             if r.error:
                 items.append(MenuItem(tr("stale_data"), color=GRAY, size=11))
         if r.error:

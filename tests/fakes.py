@@ -17,6 +17,15 @@ BUNDLE = os.path.join(ROOT, "plugin", "claude-usage.1m.py")
 PREFIX = "anthropic-ratelimit-unified-"
 
 
+def claude_usage(five, five_reset, weekly, weekly_reset, models=()):
+    """A Claude Usage: 5-hour, weekly, then (name, pct, reset) per-model weekly windows."""
+    from claude_usage.domain import (FIVE_HOUR, FIVE_HOUR_SECONDS, WEEK_SECONDS, WEEKLY, Usage,
+                                     Window)
+    return Usage((Window(FIVE_HOUR, five, five_reset, FIVE_HOUR_SECONDS),
+                  Window(WEEKLY, weekly, weekly_reset, WEEK_SECONDS))
+                 + tuple(Window(WEEKLY, pct, reset, WEEK_SECONDS, name) for name, pct, reset in models))
+
+
 def tok(name: str) -> str:
     """A string that matches the plugin's setup-token pattern."""
     return "sk-ant-oat01-" + name

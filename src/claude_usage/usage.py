@@ -1,11 +1,13 @@
-"""Reading usage and profile data from the Anthropic API, with caching."""
+"""Claude usage and profile data from the Anthropic API, and the provider-neutral caching
+of every provider's usage."""
 from __future__ import annotations
 
 import json
 import re
 from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
-from .domain import Account, ModelWindow, Usage
+from .domain import (FIVE_HOUR, FIVE_HOUR_SECONDS, WEEK_SECONDS, WEEKLY, Account, ClaudeAccount,
+                     Usage, UsageReader, Window)
 from .infra import HttpClient, HttpResponse, JsonCache
 
 OAUTH_BETA = "oauth-2025-04-20"
@@ -14,27 +16,25 @@ PROBE_SYSTEM = "You are Claude Code, Anthropic's official CLI for Claude."
 
 
 def parse_rate_headers(h: Mapping[str, str], model_windows: Mapping[str, str]) -> Usage:
-    """Usage from the anthropic-ratelimit-unified-* headers (names in lower case)."""
+    """Usage from the anthropic-ratelimit-unified-* headers (names in lower case): the
+    5-hour window, the weekly one, then each per-model weekly one."""
     p = RATE_PREFIX
-    models: List[ModelWindow] = []
+    models: List[Window] = []
     for name in h:
         m = re.match(re.escape(p) + r"7d_(\w+)-utilization$", name)
         if m:
             suffix = m.group(1)
-            models.append(ModelWindow(
-                name=model_windows.get(suffix, suffix),
-                pct=float(h[name]) * 100,
-                reset=int(h.get(p + "7d_" + suffix + "-reset") or 0),
-            ))
+            models.append(Window(WEEKLY, float(h[name]) * 100,
+                                 int(h.get(p + "7d_" + suffix + "-reset") or 0), WEEK_SECONDS,
+                                 model_windows.get(suffix, suffix)))
     # A verified Ultra account has no 5-hour limit, so the API sends no 5h-* headers for it.
     five = h.get(p + "5h-utilization")
-    return Usage(
-        five_hour=None if five is None else float(five) * 100,
-        five_hour_reset=int(h.get(p + "5h-reset") or 0),
-        weekly=float(h.get(p + "7d-utilization") or 0) * 100,
-        weekly_reset=int(h.get(p + "7d-reset") or 0),
-        models=tuple(models),
-    )
+    return Usage((
+        Window(FIVE_HOUR, None if five is None else float(five) * 100,
+               int(h.get(p + "5h-reset") or 0), FIVE_HOUR_SECONDS),
+        Window(WEEKLY, float(h.get(p + "7d-utilization") or 0) * 100,
+               int(h.get(p + "7d-reset") or 0), WEEK_SECONDS),
+    ) + tuple(models))
 
 
 def has_usage(h: Mapping[str, str]) -> bool:
@@ -44,7 +44,7 @@ def has_usage(h: Mapping[str, str]) -> bool:
 
 
 class UsageProbe:
-    """Reads usage from the rate-limit headers of a 1-token request.
+    """The Claude UsageReader: reads usage from the rate-limit headers of a 1-token request.
 
     /api/oauth/usage is not used: setup-tokens lack the scope for it and it returns 429 for
     long stretches when polled. A Fable request also returns the per-model weekly windows
@@ -57,6 +57,10 @@ class UsageProbe:
         self._api = api
         self._models = models
         self._model_windows = model_windows
+
+    def read(self, account: Account) -> Usage:
+        assert isinstance(account, ClaudeAccount)
+        return self.probe(account.token())
 
     def probe(self, token: str) -> Usage:
         last = None
@@ -127,11 +131,11 @@ def cached_usage(d: object) -> Optional[Usage]:
 
 
 class UsageService:
-    """Usage of an account, probed at most every max_age seconds. On failure it falls back
-    to the last good result and reports the error alongside."""
+    """Usage of an account, read by its provider's reader at most every max_age seconds. On
+    failure it falls back to the last good result and reports the error alongside."""
 
-    def __init__(self, probe: UsageProbe, cache: JsonCache, max_age: float):
-        self._probe = probe
+    def __init__(self, readers: Mapping[str, UsageReader], cache: JsonCache, max_age: float):
+        self._readers = readers
         self._cache = cache
         self._max_age = max_age
 
@@ -141,7 +145,7 @@ class UsageService:
         if cached:
             return cached, None
         try:
-            usage = self._probe.probe(account.token())
+            usage = self._readers[account.provider].read(account)
         except Exception as e:
             return cached_usage(self._cache.load(key)), describe_error(e)
         self._cache.save(key, usage.to_dict())
@@ -149,7 +153,8 @@ class UsageService:
 
 
 class IdentityService:
-    """The text shown after an account's label: its email for a login, "token" otherwise."""
+    """The text shown after a Claude account's label: its email for a login, "token" for a
+    setup-token. Other providers report their email with their usage."""
 
     def __init__(self, profile: ProfileClient, cache: JsonCache, max_age: float):
         self._profile = profile
@@ -157,6 +162,8 @@ class IdentityService:
         self._max_age = max_age
 
     def detail(self, account: Account) -> str:
+        if not isinstance(account, ClaudeAccount):
+            return ""
         if not account.is_login:
             return "token"
         name = account.cache_key + "-email"

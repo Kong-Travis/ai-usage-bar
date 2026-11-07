@@ -35,45 +35,61 @@ class SystemClock:
         return time.time()
 
 
+# Providers: the coding agents whose limits are shown.
+CLAUDE, CODEX, AGY = "claude", "codex", "agy"
+PROVIDERS = (CLAUDE, CODEX, AGY)  # menu order
+
+# Window kinds every provider shares. Anything else is shown under its own name.
+FIVE_HOUR, WEEKLY = "5h", "7d"
+FIVE_HOUR_SECONDS, WEEK_SECONDS = 5 * 3600, 7 * 86400
+
+
 @dataclass(frozen=True)
-class ModelWindow:
-    """A per-model weekly limit, e.g. Fable."""
-    name: str
-    pct: float
-    reset: int  # epoch seconds, 0 when unknown
+class Window:
+    """One limit: percent used of a rolling window.
+
+    kind: FIVE_HOUR, WEEKLY, or the provider's own word for another cadence.
+    pct: None when the plan has no such limit (a verified Claude Ultra has no 5-hour limit).
+    reset: epoch seconds, 0 when unknown. seconds: window length, 0 when unknown.
+    name: the model or model group the limit covers, e.g. "Fable"; "" for the whole plan.
+    """
+    kind: str
+    pct: Optional[float]
+    reset: int = 0
+    seconds: int = 0
+    name: str = ""
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {"kind": self.kind, "pct": self.pct, "reset": self.reset,
+                "seconds": self.seconds, "name": self.name}
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> Window:
+        pct = d.get("pct")
+        return cls(str(d["kind"]), None if pct is None else float(pct), int(d.get("reset") or 0),
+                   int(d.get("seconds") or 0), str(d.get("name") or ""))
 
 
 @dataclass(frozen=True)
 class Usage:
-    """Plan usage of one account, in percent of each limit. five_hour is None when the plan has
-    no 5-hour limit (a verified Ultra account)."""
-    five_hour: Optional[float]
-    five_hour_reset: int
-    weekly: float
-    weekly_reset: int
-    models: Tuple[ModelWindow, ...] = ()
+    """Plan usage of one account: its windows in display order, plus what the provider says
+    about the account itself (plan name, email), "" when it says nothing."""
+    windows: Tuple[Window, ...]
+    plan: str = ""
+    email: str = ""
 
     def percentages(self) -> List[Optional[float]]:
-        """5-hour % (None without that limit), weekly %, then each per-model weekly %."""
-        return [self.five_hour, self.weekly] + [m.pct for m in self.models]
+        """Each window's %, None for a limit the plan does not have."""
+        return [w.pct for w in self.windows]
 
     def to_dict(self) -> Dict[str, Any]:
-        # Same shape as the cache files written by v1.2.x, so an upgrade keeps them.
-        return {
-            "5h": self.five_hour, "5h_reset": self.five_hour_reset,
-            "7d": self.weekly, "7d_reset": self.weekly_reset,
-            "models": [{"name": m.name, "pct": m.pct, "reset": m.reset} for m in self.models],
-        }
+        return {"windows": [w.to_dict() for w in self.windows], "plan": self.plan,
+                "email": self.email}
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> Usage:
-        return cls(
-            five_hour=None if d.get("5h") is None else float(d["5h"]),
-            five_hour_reset=int(d.get("5h_reset") or 0),
-            weekly=float(d["7d"]), weekly_reset=int(d["7d_reset"]),
-            models=tuple(ModelWindow(str(m["name"]), float(m["pct"]), int(m.get("reset") or 0))
-                         for m in d.get("models", [])),
-        )
+        return cls(tuple(Window.from_dict(w) for w in d["windows"]), str(d.get("plan") or ""),
+                   str(d.get("email") or ""))
 
 
 class LoginExpired(Exception):
@@ -81,9 +97,10 @@ class LoginExpired(Exception):
 
 
 class Account(ABC):
-    """One Claude Code identity whose limits can be read."""
+    """One identity of one provider whose limits can be read."""
 
-    #: True for a browser login (it has a profile email), False for a setup-token.
+    provider = CLAUDE
+    #: True for a Claude browser login (it has a profile email), False otherwise.
     is_login = False
 
     def __init__(self, label: str):
@@ -92,18 +109,24 @@ class Account(ABC):
     @property
     @abstractmethod
     def identity(self) -> str:
-        """Stable key: two accounts with the same identity are the same account."""
+        """Stable key within the provider: equal identities are the same account."""
+
+    @property
+    def cache_key(self) -> str:
+        # Claude keys stay unprefixed, so its caches survive the upgrade.
+        key = self.identity if self.provider == CLAUDE else self.provider + ":" + self.identity
+        return hashlib.sha256(key.encode()).hexdigest()[:16]
+
+
+class ClaudeAccount(Account):
+    """A Claude Code identity, read with its OAuth access token."""
 
     @abstractmethod
     def token(self) -> str:
         """The OAuth access token. May raise (locked keychain, expired login...)."""
 
-    @property
-    def cache_key(self) -> str:
-        return hashlib.sha256(self.identity.encode()).hexdigest()[:16]
 
-
-class TokenAccount(Account):
+class TokenAccount(ClaudeAccount):
     """A `claude setup-token` token found in a shell file, the environment or the conf file."""
 
     def __init__(self, label: str, token: str):
@@ -124,6 +147,12 @@ class AccountSource(Protocol):
     def accounts(self) -> List[Account]: ...
 
 
+class UsageReader(Protocol):
+    """Reads the current usage of the accounts of one provider. Raises when it cannot."""
+
+    def read(self, account: Account) -> Usage: ...
+
+
 @dataclass(frozen=True)
 class AccountRow:
     """Everything the menu shows for one account."""
@@ -132,6 +161,7 @@ class AccountRow:
     detail: str
     usage: Optional[Usage]
     error: Optional[str]
+    provider: str = CLAUDE
 
 
 # ---------- claude_usage/config.py ----------
@@ -543,7 +573,7 @@ class Keychain:
                          capture_output=True, text=True, timeout=10).stdout
 
 
-class KeychainAccount(Account):
+class KeychainAccount(ClaudeAccount):
     is_login = True
 
     def __init__(self, service: str, keychain: Keychain, clock: Clock, tr: Translator):
@@ -588,7 +618,7 @@ def config_dir_label(directory: str) -> str:
     return "claude (%s)" % rest if name.lower().startswith("claude") else name
 
 
-class CredentialsFileAccount(Account):
+class CredentialsFileAccount(ClaudeAccount):
     """A browser login stored in <config dir>/.credentials.json."""
     is_login = True
 
@@ -803,16 +833,18 @@ class AccountRegistry:
 
 # ---------- claude_usage/infra.py ----------
 
-"""Small I/O adapters: HTTP client and JSON file cache."""
+"""Small I/O adapters: HTTP client, JSON file cache, installed command-line tools."""
 
 
 import json
 import os
+import shutil
+import subprocess
 import tempfile
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional, Protocol
+from typing import Any, Dict, List, Mapping, Optional, Protocol, Sequence, Tuple
 
 
 @dataclass
@@ -893,6 +925,66 @@ class JsonCache:
     def fresh(self, name: str, max_age: float) -> Any:
         """The document if it is younger than max_age seconds, else None."""
         return self.load(name) if self.age(name) < max_age else None
+
+
+# ---------- command-line tools (codex, agy) ----------
+
+# SwiftBar, Argos and a login-started tray run with a minimal PATH, so the usual install
+# folders are searched first. They also come before the shell PATH, where wrapper shims of
+# terminal apps may shadow the real tool.
+POSIX_CLI_DIRS = (".local/bin", "bin", ".npm-global/bin", ".bun/bin", ".volta/bin", ".cargo/bin",
+                  "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin")
+WINDOWS_CLI_DIRS = (r"%APPDATA%\npm", r"%LOCALAPPDATA%\Microsoft\WinGet\Links",
+                    r"%LOCALAPPDATA%\Programs\bin", r"~\.local\bin", r"~\bin")
+# No console window flashing up from the Windows tray on every refresh.
+NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
+
+def cli_search_path(home: str, env: Mapping[str, str], windows: bool) -> str:
+    """The PATH to find and run command-line tools with: install folders, then env PATH."""
+    if windows:
+        dirs = [os.path.expandvars(d).replace("~", home, 1) for d in WINDOWS_CLI_DIRS]
+    else:
+        dirs = [d if d.startswith("/") else os.path.join(home, d) for d in POSIX_CLI_DIRS]
+    dirs += (env.get("PATH") or "").split(os.pathsep)
+    seen: List[str] = []
+    for d in dirs:
+        if d and "%" not in d and d not in seen:
+            seen.append(d)
+    return os.pathsep.join(seen)
+
+
+@dataclass(frozen=True)
+class Cli:
+    """An installed command-line tool. argv: the command that starts it, e.g. ("/x/codex",),
+    or (python, "fake_codex.py") in tests. env: the environment it runs in."""
+    argv: Tuple[str, ...]
+    env: Mapping[str, str]
+
+    def run(self, args: Sequence[str], timeout: float) -> subprocess.CompletedProcess:
+        """Run to completion; raises subprocess.TimeoutExpired or OSError."""
+        return subprocess.run(list(self.argv) + list(args), env=dict(self.env), timeout=timeout,
+                              stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                              encoding="utf-8", errors="replace", creationflags=NO_WINDOW)
+
+    def start(self, args: Sequence[str]) -> subprocess.Popen:
+        """Start with line-buffered text pipes on stdin and stdout, for a JSON-RPC session."""
+        return subprocess.Popen(list(self.argv) + list(args), env=dict(self.env),
+                                stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                stderr=subprocess.DEVNULL, text=True, encoding="utf-8",
+                                errors="replace", bufsize=1, creationflags=NO_WINDOW)
+
+
+class CliLocator:
+    """Finds installed tools on cli_search_path and runs them with that PATH."""
+
+    def __init__(self, home: str, env: Mapping[str, str], windows: bool):
+        self._path = cli_search_path(home, env, windows)
+        self._env = dict(env, PATH=self._path)
+
+    def find(self, name: str) -> Optional[Cli]:
+        found = shutil.which(name, path=self._path)
+        return Cli((found,), self._env) if found else None
 
 
 # ---------- claude_usage/updater.py ----------
@@ -986,7 +1078,8 @@ class SelfUpdater:
 
 # ---------- claude_usage/usage.py ----------
 
-"""Reading usage and profile data from the Anthropic API, with caching."""
+"""Claude usage and profile data from the Anthropic API, and the provider-neutral caching
+of every provider's usage."""
 
 
 import json
@@ -1000,27 +1093,25 @@ PROBE_SYSTEM = "You are Claude Code, Anthropic's official CLI for Claude."
 
 
 def parse_rate_headers(h: Mapping[str, str], model_windows: Mapping[str, str]) -> Usage:
-    """Usage from the anthropic-ratelimit-unified-* headers (names in lower case)."""
+    """Usage from the anthropic-ratelimit-unified-* headers (names in lower case): the
+    5-hour window, the weekly one, then each per-model weekly one."""
     p = RATE_PREFIX
-    models: List[ModelWindow] = []
+    models: List[Window] = []
     for name in h:
         m = re.match(re.escape(p) + r"7d_(\w+)-utilization$", name)
         if m:
             suffix = m.group(1)
-            models.append(ModelWindow(
-                name=model_windows.get(suffix, suffix),
-                pct=float(h[name]) * 100,
-                reset=int(h.get(p + "7d_" + suffix + "-reset") or 0),
-            ))
+            models.append(Window(WEEKLY, float(h[name]) * 100,
+                                 int(h.get(p + "7d_" + suffix + "-reset") or 0), WEEK_SECONDS,
+                                 model_windows.get(suffix, suffix)))
     # A verified Ultra account has no 5-hour limit, so the API sends no 5h-* headers for it.
     five = h.get(p + "5h-utilization")
-    return Usage(
-        five_hour=None if five is None else float(five) * 100,
-        five_hour_reset=int(h.get(p + "5h-reset") or 0),
-        weekly=float(h.get(p + "7d-utilization") or 0) * 100,
-        weekly_reset=int(h.get(p + "7d-reset") or 0),
-        models=tuple(models),
-    )
+    return Usage((
+        Window(FIVE_HOUR, None if five is None else float(five) * 100,
+               int(h.get(p + "5h-reset") or 0), FIVE_HOUR_SECONDS),
+        Window(WEEKLY, float(h.get(p + "7d-utilization") or 0) * 100,
+               int(h.get(p + "7d-reset") or 0), WEEK_SECONDS),
+    ) + tuple(models))
 
 
 def has_usage(h: Mapping[str, str]) -> bool:
@@ -1030,7 +1121,7 @@ def has_usage(h: Mapping[str, str]) -> bool:
 
 
 class UsageProbe:
-    """Reads usage from the rate-limit headers of a 1-token request.
+    """The Claude UsageReader: reads usage from the rate-limit headers of a 1-token request.
 
     /api/oauth/usage is not used: setup-tokens lack the scope for it and it returns 429 for
     long stretches when polled. A Fable request also returns the per-model weekly windows
@@ -1043,6 +1134,10 @@ class UsageProbe:
         self._api = api
         self._models = models
         self._model_windows = model_windows
+
+    def read(self, account: Account) -> Usage:
+        assert isinstance(account, ClaudeAccount)
+        return self.probe(account.token())
 
     def probe(self, token: str) -> Usage:
         last = None
@@ -1113,11 +1208,11 @@ def cached_usage(d: object) -> Optional[Usage]:
 
 
 class UsageService:
-    """Usage of an account, probed at most every max_age seconds. On failure it falls back
-    to the last good result and reports the error alongside."""
+    """Usage of an account, read by its provider's reader at most every max_age seconds. On
+    failure it falls back to the last good result and reports the error alongside."""
 
-    def __init__(self, probe: UsageProbe, cache: JsonCache, max_age: float):
-        self._probe = probe
+    def __init__(self, readers: Mapping[str, UsageReader], cache: JsonCache, max_age: float):
+        self._readers = readers
         self._cache = cache
         self._max_age = max_age
 
@@ -1127,7 +1222,7 @@ class UsageService:
         if cached:
             return cached, None
         try:
-            usage = self._probe.probe(account.token())
+            usage = self._readers[account.provider].read(account)
         except Exception as e:
             return cached_usage(self._cache.load(key)), describe_error(e)
         self._cache.save(key, usage.to_dict())
@@ -1135,7 +1230,8 @@ class UsageService:
 
 
 class IdentityService:
-    """The text shown after an account's label: its email for a login, "token" otherwise."""
+    """The text shown after a Claude account's label: its email for a login, "token" for a
+    setup-token. Other providers report their email with their usage."""
 
     def __init__(self, profile: ProfileClient, cache: JsonCache, max_age: float):
         self._profile = profile
@@ -1143,6 +1239,8 @@ class IdentityService:
         self._max_age = max_age
 
     def detail(self, account: Account) -> str:
+        if not isinstance(account, ClaudeAccount):
+            return ""
         if not account.is_login:
             return "token"
         name = account.cache_key + "-email"
@@ -1207,14 +1305,26 @@ class Menu:
     compact: bool = False
 
 
-def short_name(label: str, taken: Set[str]) -> str:
-    """One letter per account (C, T, W...), with a digit when letters collide."""
-    # "claude-token" -> T, "claude (work)" -> W; plain "claude" keeps its C.
-    base = re.sub(r"^claude[\s(_.-]*", "", label, flags=re.I) or label
-    s = base[:1].upper() or "?"
-    n = 2
+# Bar-title prefix of each provider's accounts: Claude keeps its plain letters (C, T, W...).
+SHORT_PREFIX = {CLAUDE: "", CODEX: "Cx", AGY: "Ag"}
+
+
+def short_name(label: str, taken: Set[str], provider: str = CLAUDE) -> str:
+    """A short bar-title name per account, unique across all accounts.
+
+    Claude: one letter ("claude-token" -> T, "claude (work)" -> W, plain "claude" keeps its C).
+    Other providers: their prefix plus the label's first letter after the provider name
+    ("codex" -> Cx, "codex-work" -> CxW, "agy" -> Ag). A digit is added when names collide.
+    """
+    prefix = SHORT_PREFIX.get(provider, "")
+    base = re.sub(r"^%s[\s(_.-]*" % (provider if prefix else "claude"), "", label, flags=re.I)
+    if prefix:
+        first = base[:1].upper()
+    else:
+        first = (base or label)[:1].upper() or "?"
+    s, n = prefix + first, 2
     while s in taken:
-        s = base[:1].upper() + str(n)
+        s = prefix + first + str(n)
         n += 1
     taken.add(s)
     return s
@@ -1330,6 +1440,14 @@ class Presenter:
         return Menu(title, self.color(worst), bool(new_tag), worst if known else None, tuple(items),
                     compact)
 
+    def window_name(self, w: Window) -> str:
+        tr = self._tr
+        if w.kind == FIVE_HOUR and not w.name:
+            return tr("five_hour")
+        if w.kind == WEEKLY:
+            return tr("model_weekly", name=w.name) if w.name else tr("weekly")
+        return "%s (%s)" % (w.name, w.kind) if w.name else w.kind
+
     def account_items(self, r: AccountRow) -> List[MenuItem]:
         head = "%s: %s" % (r.short, r.label)
         if r.detail:
@@ -1340,17 +1458,15 @@ class Presenter:
         if u is None:
             items.append(MenuItem(tr("usage_unreadable"), color=GRAY))
         else:
-            windows = [(tr("five_hour"), u.five_hour, u.five_hour_reset),
-                       (tr("weekly"), u.weekly, u.weekly_reset)]
-            windows += [(tr("model_weekly", name=m.name), m.pct, m.reset) for m in u.models]
-            for name, pct, reset in windows:
-                if pct is None:  # the plan has no such limit
+            for w in u.windows:
+                name = self.window_name(w)
+                if w.pct is None:  # the plan has no such limit
                     items.append(MenuItem(tr("no_limit_line", name=name)))
                     continue
-                text = tr("model_line", name=name, pct="%d" % round(pct))
-                if reset:  # 0: unknown
-                    text += tr("reset_suffix", left=self.time_left(reset))
-                items.append(MenuItem(text, color=self.color(pct)))
+                text = tr("model_line", name=name, pct="%d" % round(w.pct))
+                if w.reset:  # 0: unknown
+                    text += tr("reset_suffix", left=self.time_left(w.reset))
+                items.append(MenuItem(text, color=self.color(w.pct)))
             if r.error:
                 items.append(MenuItem(tr("stale_data"), color=GRAY, size=11))
         if r.error:
@@ -1427,10 +1543,13 @@ class UsageApp:
 
         def read(acc):
             usage, error = self._usage.usage(acc, force=force)
-            return usage, error, self._identity.detail(acc)
+            # A provider that reports the email with the usage needs no profile lookup.
+            detail = usage.email if usage and usage.email else self._identity.detail(acc)
+            return usage, error, detail
 
         taken: set = set()
-        return [AccountRow(short_name(acc.label, taken), acc.label, detail, usage, error)
+        return [AccountRow(short_name(acc.label, taken, acc.provider), acc.label, detail, usage,
+                           error, acc.provider)
                 for acc, (usage, error, detail) in zip(accounts, self._map(read, accounts))]
 
     def menu(self, force: bool = False) -> Menu:
@@ -1541,8 +1660,8 @@ def build(host: Host, clock: Clock = None, http: HttpClient = None) -> Services:
     releases = ReleaseChecker(http, endpoints.github_api, REPO, cache, UPDATE_EVERY)
     app = UsageApp(
         registry=AccountRegistry(build_sources(host, config, clock, tr)),
-        usage=UsageService(UsageProbe(http, endpoints.api, PROBE_MODELS, MODEL_WINDOWS), cache,
-                           PROBE_EVERY),
+        usage=UsageService({CLAUDE: UsageProbe(http, endpoints.api, PROBE_MODELS, MODEL_WINDOWS)},
+                           cache, PROBE_EVERY),
         identity=IdentityService(ProfileClient(http, endpoints.api), cache, EMAIL_EVERY),
         releases=releases,
         presenter=Presenter(clock, tr, VERSION, REPO_URL, WARN_PCT, CRIT_PCT, MAX_IN_TITLE,

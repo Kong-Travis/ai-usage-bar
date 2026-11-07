@@ -3,7 +3,8 @@ import srcpath  # noqa: F401  (must come first)
 
 import unittest
 
-from claude_usage.domain import AccountRow, ModelWindow, Usage
+from claude_usage.domain import AccountRow
+from fakes import claude_usage
 from claude_usage.i18n import Translator
 from claude_usage.view import (GRAY, GREEN, LANGUAGE, OPEN, ORANGE, RED, REFRESH, SEPARATOR, UPDATE,
                                Presenter, short_name)
@@ -22,7 +23,7 @@ def presenter(lang="vi", max_in_title=3):
 
 
 def usage(five=13.0, weekly=8.0, models=(), five_reset=NOW + 3600, weekly_reset=NOW + 86400):
-    return Usage(five, five_reset, weekly, weekly_reset, tuple(models))
+    return claude_usage(five, five_reset, weekly, weekly_reset, models)
 
 
 def row(short, usage_=None, label="claude", detail="", error=None):
@@ -75,8 +76,8 @@ class Colors(unittest.TestCase):
 
 class Title(unittest.TestCase):
     def test_up_to_three_rows_list_every_account(self):
-        rows = [row("C", usage(13.4, 8.0, [ModelWindow("Fable", 1.0, 0)])),
-                row("T", usage(0, 65.0, [ModelWindow("Fable", 1.0, 0)])),
+        rows = [row("C", usage(13.4, 8.0, [("Fable", 1.0, 0)])),
+                row("T", usage(0, 65.0, [("Fable", 1.0, 0)])),
                 row("W", usage(1.0, 2.0))]
         menu = presenter().present(rows, None)
         self.assertEqual(menu.title, "C 13/8/1  T 0/65/1  W 1/2")
@@ -89,7 +90,7 @@ class Title(unittest.TestCase):
 
     def test_more_than_three_rows_show_the_worst_percentage(self):
         rows = [row("A", usage(10, 20)), row("B", usage(55.6, 30)), row("C", usage(1, 2)),
-                row("D", usage(5, 6, [ModelWindow("Fable", 40.0, 0)]))]
+                row("D", usage(5, 6, [("Fable", 40.0, 0)]))]
         menu = presenter().present(rows, None)
         self.assertEqual(menu.title, "Claude 56%")
         self.assertEqual(menu.worst, 55.6)
@@ -103,7 +104,7 @@ class Title(unittest.TestCase):
     def test_title_color_follows_the_worst_value(self):
         self.assertIsNone(presenter().present([row("C", usage(10, 20))], None).title_color)
         self.assertEqual(presenter().present([row("C", usage(75, 20))], None).title_color, ORANGE)
-        hot = usage(10, 20, [ModelWindow("Fable", 95.0, 0)])
+        hot = usage(10, 20, [("Fable", 95.0, 0)])
         self.assertEqual(presenter().present([row("C", hot)], None).title_color, RED)
 
     def test_no_accounts(self):
@@ -155,7 +156,7 @@ class AccountItems(unittest.TestCase):
         self.assertIs(items[-1], SEPARATOR)
 
     def test_model_window_with_and_without_reset(self):
-        models = [ModelWindow("Fable", 50.0, NOW + 7200), ModelWindow("Other", 1.0, 0)]
+        models = [("Fable", 50.0, NOW + 7200), ("Other", 1.0, 0)]
         items = presenter().account_items(row("C", usage(models=models)))
         self.assertEqual(items[3].text, "Fable (tuần): 50%  (reset sau 2 giờ)")
         self.assertEqual(items[4].text, "Other (tuần): 1%")

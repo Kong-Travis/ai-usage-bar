@@ -10,7 +10,7 @@ from .app import RunLog, UsageApp
 from .config import (EMAIL_EVERY, MAX_IN_TITLE, MODEL_WINDOWS, PLUGIN_PATH_IN_REPO, PROBE_EVERY,
                      PROBE_MODELS, REPO, REPO_URL, SHOW_SUPPORT, UPDATE_EVERY, VERSION, CRIT_PCT,
                      WARN_PCT, Endpoints)
-from .domain import AccountSource, Clock, SystemClock
+from .domain import CLAUDE, AccountSource, Clock, SystemClock
 from .i18n import Translator, normalize_language
 from .infra import HttpClient, JsonCache, UrllibHttpClient
 from .scan import ShellScanner
@@ -100,8 +100,8 @@ def build(host: Host, clock: Clock = None, http: HttpClient = None) -> Services:
     releases = ReleaseChecker(http, endpoints.github_api, REPO, cache, UPDATE_EVERY)
     app = UsageApp(
         registry=AccountRegistry(build_sources(host, config, clock, tr)),
-        usage=UsageService(UsageProbe(http, endpoints.api, PROBE_MODELS, MODEL_WINDOWS), cache,
-                           PROBE_EVERY),
+        usage=UsageService({CLAUDE: UsageProbe(http, endpoints.api, PROBE_MODELS, MODEL_WINDOWS)},
+                           cache, PROBE_EVERY),
         identity=IdentityService(ProfileClient(http, endpoints.api), cache, EMAIL_EVERY),
         releases=releases,
         presenter=Presenter(clock, tr, VERSION, REPO_URL, WARN_PCT, CRIT_PCT, MAX_IN_TITLE,

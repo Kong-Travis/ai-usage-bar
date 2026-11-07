@@ -67,10 +67,13 @@ class UsageApp:
 
         def read(acc):
             usage, error = self._usage.usage(acc, force=force)
-            return usage, error, self._identity.detail(acc)
+            # A provider that reports the email with the usage needs no profile lookup.
+            detail = usage.email if usage and usage.email else self._identity.detail(acc)
+            return usage, error, detail
 
         taken: set = set()
-        return [AccountRow(short_name(acc.label, taken), acc.label, detail, usage, error)
+        return [AccountRow(short_name(acc.label, taken, acc.provider), acc.label, detail, usage,
+                           error, acc.provider)
                 for acc, (usage, error, detail) in zip(accounts, self._map(read, accounts))]
 
     def menu(self, force: bool = False) -> Menu:

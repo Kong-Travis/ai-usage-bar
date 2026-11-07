@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import Callable, Iterable, List, Optional, Sequence, Tuple
 
 from .config import KEYCHAIN_SERVICE
-from .domain import Account, AccountSource, Clock, LoginExpired, TokenAccount
+from .domain import Account, AccountSource, ClaudeAccount, Clock, LoginExpired, TokenAccount
 from .i18n import Translator, normalize_language
 from .scan import ShellScanner, expand_path, read_token_file, token_in_text
 
@@ -157,7 +157,7 @@ class Keychain:
                          capture_output=True, text=True, timeout=10).stdout
 
 
-class KeychainAccount(Account):
+class KeychainAccount(ClaudeAccount):
     is_login = True
 
     def __init__(self, service: str, keychain: Keychain, clock: Clock, tr: Translator):
@@ -202,7 +202,7 @@ def config_dir_label(directory: str) -> str:
     return "claude (%s)" % rest if name.lower().startswith("claude") else name
 
 
-class CredentialsFileAccount(Account):
+class CredentialsFileAccount(ClaudeAccount):
     """A browser login stored in <config dir>/.credentials.json."""
     is_login = True
 
