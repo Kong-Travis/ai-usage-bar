@@ -21,9 +21,11 @@ def limit(used, minutes, reset=1000):
     return {"usedPercent": used, "windowDurationMins": minutes, "resetsAt": reset}
 
 
-# A launcher that forks the real program (an npm .cmd shim, a shell wrapper) and waits.
-# <&0: sh would otherwise give the background child /dev/null as stdin.
-FORKING_LAUNCHER = ("/bin/sh", "-c", '"$0" "$1" <&0 & wait', sys.executable)
+# A launcher that starts the real program as a child and waits for it, like an npm .cmd
+# shim or a shell wrapper: killing only the launcher leaves the child holding our pipes.
+FORKING_LAUNCHER = (sys.executable, "-c",
+                    "import subprocess, sys; sys.exit(subprocess.call(sys.argv[1:]))",
+                    sys.executable)
 
 
 class TempHome(unittest.TestCase):
@@ -124,7 +126,9 @@ class ParsingTest(unittest.TestCase):
 class ReaderTest(TempHome):
     def read(self, mode, timeout=20, argv=(sys.executable,)):
         log = os.path.join(self.home, "seen-home")
-        env = dict(os.environ, FAKE_CODEX_MODE=mode, FAKE_CODEX_LOG=log, CODEX_HOME="/wrong")
+        self.pid_file = os.path.join(self.home, "server-pid")
+        env = dict(os.environ, FAKE_CODEX_MODE=mode, FAKE_CODEX_LOG=log, CODEX_HOME="/wrong",
+                   FAKE_CODEX_PID=self.pid_file)
         reader = CodexReader(Cli(tuple(argv) + (FAKE,), env), timeout)
         account = CodexAccount(os.path.join(self.home, ".codex-work"))
         usage = reader.read(account)
@@ -156,14 +160,24 @@ class ReaderTest(TempHome):
             self.read("hang", timeout=0.5)
         self.assertLess(time.time() - start, 15)
 
-    @unittest.skipIf(os.name == "nt", "the launcher is a shell script")
-    def test_a_hung_server_behind_a_forking_launcher_still_times_out(self):
-        # Killing only the launcher left the forked server holding stdout, so the read hung
-        # for as long as the server did and froze the whole menu.
+    def test_a_hung_server_behind_a_forking_launcher_times_out_and_is_killed(self):
+        # The old reader blocked on the forked server's stdout after killing only the launcher,
+        # freezing the whole menu, and left the server running.
         start = time.time()
         with self.assertRaisesRegex(RuntimeError, "timed out"):
             self.read("hang", timeout=1, argv=FORKING_LAUNCHER)
         self.assertLess(time.time() - start, 10)
+        if os.name != "nt":  # signal 0 only checks liveness on POSIX
+            with open(self.pid_file) as f:
+                pid = int(f.read())
+            for _ in range(30):  # the orphan is reaped by init shortly after it dies
+                try:
+                    os.kill(pid, 0)
+                except OSError:
+                    break
+                time.sleep(0.1)
+            else:
+                self.fail("the forked server is still running")
 
 
 if __name__ == "__main__":

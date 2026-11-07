@@ -3,6 +3,7 @@
 Like the real one it quits on stdin EOF without answering what is still pending.
 FAKE_CODEX_MODE: ok, error, early_exit, hang, other_limit.
 FAKE_CODEX_LOG: a file that receives the CODEX_HOME the server saw.
+FAKE_CODEX_PID: a file that receives the server process id.
 """
 import json
 import os
@@ -43,6 +44,10 @@ def main():
     if log:
         with open(log, "w") as f:
             f.write(os.environ.get("CODEX_HOME", ""))
+    pid_file = os.environ.get("FAKE_CODEX_PID")
+    if pid_file:
+        with open(pid_file, "w") as f:
+            f.write(str(os.getpid()))
     sys.stdout.write("\nnot json at all\n")
     send({"jsonrpc": "2.0", "method": "remoteControl/status/changed", "params": {}})
     for line in sys.stdin:
