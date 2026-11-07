@@ -179,7 +179,7 @@ class BarChoices(unittest.TestCase):
             home.append(".config/claude-usage.conf", "hide = work, claude-token\n")
             with FakeServer(plans, latest_tag=tag) as server:
                 out = run_plugin(home, server)
-        self.assertTrue(out.startswith(' | sfimage=speedometer tooltip=Claude\n'), out[:60])
+        self.assertTrue(out.startswith(' | sfimage=speedometer tooltip=AI\n'), out[:60])
 
     def test_a_label_with_spaces_round_trips(self):
         with FakeHome() as home:

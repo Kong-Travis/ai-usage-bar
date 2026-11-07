@@ -1,7 +1,15 @@
-# claude-usage-bar
+# ai-usage-bar (AI Usage)
 
-Claude Code usage limits in the macOS menu bar (SwiftBar), the GNOME top bar (Argos) and the
-Windows / Linux tray. See README.md for the module map.
+Usage limits of Claude Code, OpenAI Codex (via `codex app-server`) and Google Antigravity (via
+`agy -p /usage`) in the macOS menu bar (SwiftBar), the GNOME top bar (Argos) and the Windows /
+Linux tray. See README.md for the module map.
+
+The repo was renamed from claude-usage-bar. Paths and names that still say `claude-usage` stay
+on purpose so existing installs self-update in place and never end up with two icons:
+`plugin/claude-usage.1m.py` and the installed plugin file name, `src/claude_usage/`,
+`~/.cache/claude-usage`, `~/.config/claude-usage.conf`, `%LOCALAPPDATA%\claude-usage`,
+`~/.local/share/claude-usage`, `~/.config/autostart/claude-usage.desktop` and the Windows
+Startup shortcut `Claude Code usage.lnk`. Only visible text and release asset names changed.
 
 ## Rules
 
@@ -58,8 +66,9 @@ Goal: the fastest result for the fewest tokens, without losing confidence in rea
 
 - Run independent work as parallel agents in one message, each owning a disjoint set of files.
   Natural lanes: `tray_win32.py`; `tray.py` and `tray_gtk.py`; `view.py`, `xbar.py` and
-  `i18n.py`; `sources.py` and `scan.py`; `usage.py` and `infra.py`; `updater.py`, `tools/`
-  and `installer/`. Each lane also owns its own `tests/test_<module>.py`.
+  `i18n.py`; `sources.py` and `scan.py`; `usage.py` and `infra.py`; `codex.py`; `antigravity.py`;
+  `pace.py` (with `view.py`); `notify.py` (with the tray lane); `updater.py`, `tools/` and
+  `installer/`. Each lane also owns its own `tests/test_<module>.py`.
 - Shared outputs belong to the main session only, after the lanes finish: `./build.sh`
   (`plugin/claude-usage.1m.py`, `dist/`), `tests/golden/`, the git index, commit and push.
 

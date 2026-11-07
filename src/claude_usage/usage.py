@@ -29,12 +29,13 @@ def parse_rate_headers(h: Mapping[str, str], model_windows: Mapping[str, str]) -
                                  model_windows.get(suffix, suffix)))
     # A verified Ultra account has no 5-hour limit, so the API sends no 5h-* headers for it.
     five = h.get(p + "5h-utilization")
-    return Usage((
-        Window(FIVE_HOUR, None if five is None else float(five) * 100,
-               int(h.get(p + "5h-reset") or 0), FIVE_HOUR_SECONDS),
-        Window(WEEKLY, float(h.get(p + "7d-utilization") or 0) * 100,
-               int(h.get(p + "7d-reset") or 0), WEEK_SECONDS),
-    ) + tuple(models))
+    windows = [Window(FIVE_HOUR, None if five is None else float(five) * 100,
+                      int(h.get(p + "5h-reset") or 0), FIVE_HOUR_SECONDS)]
+    weekly = h.get(p + "7d-utilization")
+    if weekly is not None:  # a missing header is unknown, never 0%
+        windows.append(Window(WEEKLY, float(weekly) * 100, int(h.get(p + "7d-reset") or 0),
+                              WEEK_SECONDS))
+    return Usage(tuple(windows + models))
 
 
 def has_usage(h: Mapping[str, str]) -> bool:

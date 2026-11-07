@@ -4,15 +4,18 @@ from __future__ import annotations
 import os
 import sys
 from dataclasses import dataclass
-from typing import List, Mapping
+from typing import Dict, List, Mapping, Tuple
 
 from .app import RunLog, UsageApp
 from .config import (EMAIL_EVERY, MAX_IN_TITLE, MODEL_WINDOWS, PLUGIN_PATH_IN_REPO, PROBE_EVERY,
-                     PROBE_MODELS, REPO, REPO_URL, SHOW_SUPPORT, UPDATE_EVERY, VERSION, CRIT_PCT,
-                     WARN_PCT, Endpoints)
-from .domain import CLAUDE, AccountSource, Clock, SystemClock
+                     PROBE_MODELS, REPO, REPO_URL, SHOW_SUPPORT, UPDATE_EVERY, VERSION,
+                     Endpoints)
+from .antigravity import AgyReader, AgySource
+from .codex import CodexReader, CodexSource
+from .domain import AGY, CLAUDE, CODEX, AccountSource, Clock, SystemClock, UsageReader
 from .i18n import Translator, normalize_language
-from .infra import HttpClient, JsonCache, UrllibHttpClient
+from .infra import CliLocator, HttpClient, JsonCache, UrllibHttpClient
+from .notify import LimitAlerts, Notifier, NullNotifier
 from .scan import ShellScanner
 from .sources import (POSIX_RC_FILES, WINDOWS_RC_FILES, AccountRegistry, ConfigDirFinder,
                       ConfTokenSource, CredentialsFileSource, EnvTokenSource, FallbackSource, Keychain,
@@ -61,7 +64,8 @@ def build_translator(host: Host, config: UserConfig) -> Translator:
     return Translator(normalize_language(host.env.get("CLAUDE_USAGE_LANG")) or config.language or "")
 
 
-def build_sources(host: Host, config: UserConfig, clock: Clock, tr: Translator) -> List[AccountSource]:
+def build_claude_sources(host: Host, config: UserConfig, clock: Clock,
+                         tr: Translator) -> List[AccountSource]:
     scanner = ShellScanner(host.home)
     if host.os_name == WINDOWS:
         files = ShellFiles(host.home, WINDOWS_RC_FILES, is_windows_script)
@@ -83,6 +87,27 @@ def build_sources(host: Host, config: UserConfig, clock: Clock, tr: Translator) 
     return sources
 
 
+def build_providers(host: Host, config: UserConfig, clock: Clock, tr: Translator, http: HttpClient,
+                    endpoints: Endpoints) -> Tuple[List[AccountSource], Dict[str, UsageReader]]:
+    """Every account source, in menu order, and the usage reader of each provider. Codex and
+    Antigravity are read through their own CLIs, so they appear only when installed."""
+    sources = build_claude_sources(host, config, clock, tr)
+    readers: Dict[str, UsageReader] = {
+        CLAUDE: UsageProbe(http, endpoints.api, PROBE_MODELS, MODEL_WINDOWS)}
+    locator = CliLocator(host.home, host.env, host.os_name == WINDOWS)
+    if CODEX not in config.providers_off:
+        codex = locator.find("codex")
+        sources.append(CodexSource(host.home, host.env, codex))
+        if codex:
+            readers[CODEX] = CodexReader(codex)
+    if AGY not in config.providers_off:
+        agy = locator.find("agy")
+        sources.append(AgySource(host.home, agy))
+        if agy:
+            readers[AGY] = AgyReader(agy, os.path.join(host.cache_dir, "agy.log"))
+    return sources, readers
+
+
 @dataclass
 class Services:
     app: UsageApp
@@ -90,7 +115,9 @@ class Services:
     tr: Translator
 
 
-def build(host: Host, clock: Clock = None, http: HttpClient = None) -> Services:
+def build(host: Host, clock: Clock = None, http: HttpClient = None,
+          notifier: Notifier = None) -> Services:
+    """notifier: how this frontend shows desktop notifications; none by default."""
     clock = clock or SystemClock()
     http = http or UrllibHttpClient()
     endpoints = Endpoints.from_env(host.env)
@@ -98,16 +125,22 @@ def build(host: Host, clock: Clock = None, http: HttpClient = None) -> Services:
     config = UserConfig.load(host.conf_path, host.home)
     tr = build_translator(host, config)
     releases = ReleaseChecker(http, endpoints.github_api, REPO, cache, UPDATE_EVERY)
+    sources, readers = build_providers(host, config, clock, tr, http, endpoints)
+    presenter = Presenter(clock, tr, VERSION, REPO_URL, config.warn, config.crit, MAX_IN_TITLE,
+                          SHOW_SUPPORT, hidden=config.hidden, compact=config.compact)
+    # Alerts use the same crit as the red colour, so a notification matches what the bar shows.
+    alerts = LimitAlerts(notifier if notifier and config.notify else NullNotifier(), cache, tr,
+                         config.crit, presenter.time_left, presenter.window_name, clock)
     app = UsageApp(
-        registry=AccountRegistry(build_sources(host, config, clock, tr)),
-        usage=UsageService({CLAUDE: UsageProbe(http, endpoints.api, PROBE_MODELS, MODEL_WINDOWS)},
-                           cache, PROBE_EVERY),
+        registry=AccountRegistry(sources),
+        usage=UsageService(readers, cache, PROBE_EVERY),
         identity=IdentityService(ProfileClient(http, endpoints.api), cache, EMAIL_EVERY),
         releases=releases,
-        presenter=Presenter(clock, tr, VERSION, REPO_URL, WARN_PCT, CRIT_PCT, MAX_IN_TITLE,
-                            SHOW_SUPPORT, hidden=config.hidden, compact=config.compact),
+        presenter=presenter,
         run_log=RunLog(host.cache_dir, clock, VERSION),
         version=VERSION,
+        # No alerts for an account the user took out of the bar.
+        alerts=lambda rows: alerts.check([r for r in rows if r.label not in config.hidden]),
     )
     updater = SelfUpdater(http, releases, endpoints.github_raw, REPO, PLUGIN_PATH_IN_REPO, VERSION,
                           host.self_path)

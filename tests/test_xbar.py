@@ -3,8 +3,9 @@ import srcpath  # noqa: F401  (must come first)
 
 import unittest
 
-from claude_usage.view import (LANGUAGE, OPEN, QUIT, REFRESH, SEPARATOR, UPDATE, Action, Menu,
-                               MenuItem)
+from claude_usage.domain import AGY, CLAUDE, CODEX
+from claude_usage.view import (LANGUAGE, OPEN, QUIT, REFRESH, SEPARATOR, UPDATE, WARNING_ICON, Action,
+                               Menu, MenuItem)
 from claude_usage.xbar import ARGOS, SWIFTBAR, XbarRenderer
 
 SELF = "/opt/claude usage/plugin.py"
@@ -66,6 +67,34 @@ class Items(unittest.TestCase):
         line = XbarRenderer(SELF).item(MenuItem("Lỗi: a | b", color="gray", size=11))
         self.assertEqual(line, "Lỗi: a / b | color=gray size=11")
         self.assertEqual(line.count("|"), 1)
+
+
+class Icons(unittest.TestCase):
+    def test_swiftbar_sf_symbols_tinted_like_the_text(self):
+        r = XbarRenderer(SELF, SWIFTBAR)
+        self.assertEqual(r.item(MenuItem("Claude Code", color="gray", size=12, icon=CLAUDE)),
+                         "Claude Code | color=gray size=12 sfimage=sparkle sfcolor=gray")
+        self.assertEqual(r.item(MenuItem("Codex", icon=CODEX)), "Codex | sfimage=terminal")
+        self.assertEqual(r.item(MenuItem("Antigravity", icon=AGY)), "Antigravity | sfimage=atom")
+        self.assertEqual(r.item(MenuItem("w", color="red", icon=WARNING_ICON)),
+                         "w | color=red sfimage=exclamationmark.triangle sfcolor=red")
+
+    def test_argos_icon_names(self):
+        r = XbarRenderer(SELF, ARGOS)
+        self.assertEqual(r.item(MenuItem("Codex", icon=CODEX)),
+                         "Codex | iconName=utilities-terminal-symbolic")
+        self.assertEqual(r.item(MenuItem("w", color="orange", icon=WARNING_ICON)),
+                         "w | color=orange iconName=dialog-warning-symbolic")
+
+    def test_argos_checkmark_wins_over_the_icon(self):
+        line = XbarRenderer(SELF, ARGOS).item(MenuItem("x", checked=True, icon=CLAUDE))
+        self.assertEqual(line, "x | iconName=object-select-symbolic")
+
+    def test_unknown_or_missing_icon_adds_nothing(self):
+        for flavor in (SWIFTBAR, ARGOS):
+            r = XbarRenderer(SELF, flavor)
+            self.assertEqual(r.item(MenuItem("x", icon="nope")), "x")
+            self.assertEqual(r.item(MenuItem("x")), "x")
 
 
 if __name__ == "__main__":

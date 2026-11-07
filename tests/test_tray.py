@@ -6,8 +6,9 @@ import unittest
 from unittest import mock
 
 from claude_usage.i18n import Translator
-from claude_usage.tray import (TRAY_REFRESH_SECONDS, TrayBackend, TrayController, error_menu,
-                               loading_menu, quit_item, relaunch, relaunch_command, with_quit)
+from claude_usage.tray import (TRAY_REFRESH_SECONDS, TrayBackend, TrayController, TrayNotifier,
+                               error_menu, loading_menu, quit_item, relaunch, relaunch_command,
+                               with_quit)
 from claude_usage.view import (COMPACT, HIDE_ACCOUNT, LANGUAGE, OPEN, QUIT, REFRESH, SEPARATOR,
                                SHOW_ACCOUNT, UPDATE, CHECK_UPDATE, Action, Menu,
                                MenuItem)
@@ -90,7 +91,7 @@ class StartTest(unittest.TestCase):
         h.controller.run()
         self.assertEqual(h.backend.handler, h.controller.on_action)
         loading, real = h.backend.shown
-        self.assertEqual(loading.title, "Claude ...")
+        self.assertEqual(loading.title, "AI ...")
         self.assertEqual(loading.items[0].text, "Đang đọc hạn mức...")
         self.assertEqual(real.title, "C 1/2")
         self.assertEqual(real.items[-2:], (SEPARATOR, quit_item(VI)))
@@ -157,7 +158,7 @@ class ActionsTest(unittest.TestCase):
         h = Harness(update=boom)
         h.controller.on_action(Action(UPDATE))
         menu = h.backend.shown[-1]
-        self.assertEqual(menu.title, "Claude ?")
+        self.assertEqual(menu.title, "AI ?")
         self.assertEqual(menu.items[0].text, "Lỗi: RuntimeError: download HTTP 404")
         self.assertEqual(h.restarts, 0)
         self.assertEqual(h.backend.quit_calls, 0)
@@ -225,7 +226,7 @@ class ReloadTest(unittest.TestCase):
         h = Harness(build_menu=build)
         h.controller.reload()
         menu = h.backend.shown[-1]
-        self.assertEqual(menu.title, "Claude ?")
+        self.assertEqual(menu.title, "AI ?")
         self.assertTrue(menu.items[0].text.startswith("Lỗi: ValueError: xxx"))
         self.assertEqual(len(menu.items[0].text), len("Lỗi: ValueError: ") + 160)
         self.assertEqual(menu.items[1].action.kind, REFRESH)
@@ -258,6 +259,26 @@ class MenuHelpers(unittest.TestCase):
         self.assertEqual(quit_item(en).text, "Quit")
         self.assertEqual(loading_menu(en).items[0].text, "Reading limits...")
         self.assertEqual(error_menu(KeyError("k"), en).items[0].text, "Error: KeyError: 'k'")
+
+
+class Notifications(unittest.TestCase):
+    def test_a_backend_without_notifications_ignores_them(self):
+        FakeBackend().notify("Claude Code", "C claude, 5 giờ: đã dùng 92%")
+
+    def test_tray_notifier_shows_on_the_ui_thread_not_the_worker(self):
+        queued, shown = [], []
+
+        class Queueing(FakeBackend):
+            def call_soon(self, fn):
+                queued.append(fn)
+
+            def notify(self, title, body):
+                shown.append((title, body))
+
+        TrayNotifier(Queueing()).notify("Codex", "Cx codex, Tuần: đã hết hạn mức")
+        self.assertEqual(shown, [])  # the worker thread only queues it
+        queued.pop()()
+        self.assertEqual(shown, [("Codex", "Cx codex, Tuần: đã hết hạn mức")])
 
 
 class Relaunch(unittest.TestCase):

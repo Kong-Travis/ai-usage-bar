@@ -98,6 +98,12 @@ class ParseRateHeaders(unittest.TestCase):
         u = parse_rate_headers(headers(), {})
         self.assertEqual(models(u), ())
 
+    def test_a_missing_weekly_header_is_left_out_not_shown_as_zero(self):
+        h = headers(five=0.4)
+        del h[P + "7d-utilization"], h[P + "7d-reset"]
+        u = parse_rate_headers(h, {})
+        self.assertEqual([(w.kind, w.pct) for w in u.windows], [("5h", 40.0)])
+
     def test_no_five_hour_headers_means_no_five_hour_limit_and_survives_the_cache(self):
         h = headers(seven=0.58)
         del h[P + "5h-utilization"], h[P + "5h-reset"]

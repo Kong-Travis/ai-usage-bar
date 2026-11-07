@@ -55,7 +55,7 @@ check '[ -x "$HOME/.config/argos/claude-usage.1m.py" ]' "Argos plugin installed 
 check '[ -f "$EXT/metadata.json" ] && [ -f "$EXT/extension.js" ]' "Argos extension unpacked"
 check 'grep -q "\"51\"" "$EXT/metadata.json"' "master Argos (declares GNOME 51)"
 check 'grep -qx "language = en" "$HOME/.config/claude-usage.conf" && grep -qx "work = ~/tok.txt" "$HOME/.config/claude-usage.conf"' "conf: language = en added, other lines kept"
-check 'grep -q "It will show: C ?" out.log || grep -q "It will show: Claude ?" out.log' "test run printed the English title"
+check 'grep -q "It will show: AI ?" out.log' "test run printed the English title"
 
 echo; echo "===== 3. Argos auto-detected: XDG_CURRENT_DESKTOP=ubuntu:GNOME, fake GNOME Shell 44.3"
 export HOME=$(mktemp -d)

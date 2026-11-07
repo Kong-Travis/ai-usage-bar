@@ -7,11 +7,11 @@ import os
 import re
 import stat
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Callable, Iterable, List, Optional, Sequence, Tuple
 
-from .config import KEYCHAIN_SERVICE
-from .domain import Account, AccountSource, ClaudeAccount, Clock, LoginExpired, TokenAccount
+from .config import CRIT_PCT, KEYCHAIN_SERVICE, WARN_PCT
+from .domain import AGY, CODEX, Account, AccountSource, ClaudeAccount, Clock, LoginExpired, TokenAccount
 from .i18n import Translator, normalize_language
 from .scan import ShellScanner, expand_path, read_token_file, token_in_text
 
@@ -32,42 +32,62 @@ CREDENTIALS_FILE = ".credentials.json"
 @dataclass(frozen=True)
 class UserConfig:
     """~/.config/claude-usage.conf, one entry per line:
-        label = /path/to/token-file     add a token the scan cannot find
-        keychain = off                  hide browser logins (keychain and credentials files)
+        label = /path/to/token-file     add a Claude token the scan cannot find
+        keychain = off                  hide Claude browser logins (keychain, credentials files)
+        codex = off                     hide Codex accounts (agy = off: hide Antigravity)
         language = en                   English menus (default: vi, Vietnamese)
         hide = c-m, c-nsc               accounts (by label) left out of the bar title
         compact = on                    show only an icon in the bar
+        warn = 70                       percent at which a limit turns orange
+        crit = 90                       percent at which it turns red and notifies
+        notify = off                    no notifications
     """
     token_files: Tuple[Tuple[str, str], ...] = ()
     show_logins: bool = True
     language: Optional[str] = None
     hidden: Tuple[str, ...] = ()
     compact: bool = False
+    warn: int = WARN_PCT
+    crit: int = CRIT_PCT
+    notify: bool = True
+    providers_off: Tuple[str, ...] = ()
 
     @classmethod
     def load(cls, path: str, home: str) -> UserConfig:
-        token_files, show_logins, language, hidden, compact = [], True, None, (), False
         try:
             with open(path, encoding="utf-8-sig", errors="ignore") as f:
                 lines = f.read().splitlines()
         except OSError:
             return cls()
+        token_files: List[Tuple[str, str]] = []
+        off: List[str] = []
+        fields: dict = {}
         for line in lines:
             line = line.split("#", 1)[0].strip()
             if "=" not in line:
                 continue
             key, val = (s.strip() for s in line.split("=", 1))
             if key in ("keychain", "logins"):
-                show_logins = not is_off(val)
+                fields["show_logins"] = not is_off(val)
             elif key == "language":
-                language = normalize_language(val)
+                fields["language"] = normalize_language(val)
             elif key == HIDE_KEY:
-                hidden = split_labels(val)
+                fields["hidden"] = split_labels(val)
             elif key == COMPACT_KEY:
-                compact = val.lower() in ("on", "yes", "true", "1")
+                fields["compact"] = is_on(val)
+            elif key == "notify":
+                fields["notify"] = not is_off(val)
+            elif key in ("warn", "crit") and val.isdigit() and 0 < int(val) <= 100:
+                fields[key] = int(val)
+            elif key in (CODEX, AGY) and (is_on(val) or is_off(val)):
+                if is_off(val):
+                    off.append(key)
             elif val:
                 token_files.append((key, expand_path(val, home)))
-        return cls(tuple(token_files), show_logins, language, hidden, compact)
+        cfg = cls(tuple(token_files), providers_off=tuple(off), **fields)
+        if cfg.warn >= cfg.crit:  # a mistyped pair falls back to the defaults
+            cfg = replace(cfg, warn=WARN_PCT, crit=CRIT_PCT)
+        return cfg
 
 
 HIDE_KEY, COMPACT_KEY = "hide", "compact"
@@ -75,6 +95,10 @@ HIDE_KEY, COMPACT_KEY = "hide", "compact"
 
 def is_off(value: str) -> bool:
     return value.lower() in ("off", "no", "false", "0")
+
+
+def is_on(value: str) -> bool:
+    return value.lower() in ("on", "yes", "true", "1")
 
 
 def split_labels(value: str) -> Tuple[str, ...]:

@@ -3,8 +3,9 @@ from __future__ import annotations
 
 from typing import List
 
-from .view import (CHECK_UPDATE, COMPACT, HIDE_ACCOUNT, LANGUAGE, OPEN, QUIT, REFRESH, SHOW_ACCOUNT, UPDATE, Menu,
-                   MenuItem)
+from .domain import AGY, CLAUDE, CODEX
+from .view import (CHECK_UPDATE, COMPACT, HIDE_ACCOUNT, LANGUAGE, OPEN, QUIT, REFRESH, SHOW_ACCOUNT, UPDATE,
+                   WARNING_ICON, Menu, MenuItem)
 
 SWIFTBAR, ARGOS = "swiftbar", "argos"
 CLI_FLAGS = {REFRESH: "--force", UPDATE: "--update", CHECK_UPDATE: "--check-update"}
@@ -17,6 +18,16 @@ SETTING_FLAGS = {LANGUAGE: "--lang", SHOW_ACCOUNT: "--show", HIDE_ACCOUNT: "--hi
 COMPACT_SFIMAGE, UPDATE_SFIMAGE = "speedometer", "arrow.down.circle"
 COMPACT_ARGOS_ICON = "utilities-system-monitor-symbolic"
 UPDATE_ARGOS_ICON = "software-update-available-symbolic"
+# MenuItem.icon -> SF Symbol. Each name is in the 2019 or 2020 set of CoreGlyphs'
+# name_availability.plist (macOS 10.15 / 11), so it draws on Big Sur and later:
+# sparkle 2020 (Anthropic's spark mark), terminal 2020 (Codex, a terminal agent),
+# atom 2020 (Antigravity), exclamationmark.triangle 2019.
+ITEM_SFIMAGE = {CLAUDE: "sparkle", CODEX: "terminal", AGY: "atom",
+                WARNING_ICON: "exclamationmark.triangle"}
+# The same for Argos: freedesktop / Adwaita symbolic names (not checked on a GNOME desktop
+# here; an unknown name draws no icon, the text stays).
+ITEM_ARGOS_ICON = {CLAUDE: "starred-symbolic", CODEX: "utilities-terminal-symbolic",
+                   AGY: "applications-science-symbolic", WARNING_ICON: "dialog-warning-symbolic"}
 
 
 def xbar_quote(value: str) -> str:
@@ -78,6 +89,7 @@ class XbarRenderer:
         if item.checked:  # Argos has no checkmark; a check icon stands in for it
             params.append("iconName=object-select-symbolic" if self._flavor == ARGOS
                           else "checked=true")
+        params += self.icon_params(item)
         a = item.action
         if a and a.kind == OPEN:
             params.append("href=" + a.url)
@@ -89,3 +101,14 @@ class XbarRenderer:
                           % (self._self_path, SETTING_FLAGS[a.kind], xbar_quote(a.value)))
         text = item.text.replace("|", "/")
         return text + (" | " + " ".join(params) if params else "")
+
+    def icon_params(self, item: MenuItem) -> List[str]:
+        """The item's icon, tinted like its text. On Argos a checked item already uses its
+        one icon for the checkmark, which wins."""
+        if self._flavor == ARGOS:
+            name = ITEM_ARGOS_ICON.get(item.icon or "")
+            return ["iconName=" + name] if name and not item.checked else []
+        name = ITEM_SFIMAGE.get(item.icon or "")
+        if not name:
+            return []
+        return ["sfimage=" + name] + (["sfcolor=" + item.color] if item.color else [])

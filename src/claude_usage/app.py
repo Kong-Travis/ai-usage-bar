@@ -52,8 +52,11 @@ class RunLog:
 class UsageApp:
     def __init__(self, registry: AccountRegistry, usage: UsageService, identity: IdentityService,
                  releases: ReleaseChecker, presenter: Presenter, run_log: RunLog, version: str,
-                 mapper: Callable[[Callable, Iterable], List] = map_parallel):
+                 mapper: Callable[[Callable, Iterable], List] = map_parallel,
+                 alerts: Callable[[Sequence[AccountRow]], None] = lambda rows: None):
+        """alerts: shown the fresh rows of every menu, to notify when a limit gets close."""
         self._map = mapper
+        self._alerts = alerts
         self._registry = registry
         self._usage = usage
         self._identity = identity
@@ -81,6 +84,7 @@ class UsageApp:
         rows = self.rows(force=force)
         if rows:
             self._run_log.write(rows)
+            self._alerts(rows)
         newer = is_newer(tag, self._version)
         return self._presenter.present(rows, tag if newer else None,
                                        up_to_date=tag is not None and not newer)

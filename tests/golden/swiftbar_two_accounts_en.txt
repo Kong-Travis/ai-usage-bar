@@ -1,20 +1,25 @@
 T 0/65/1  W 93/72/50 | color=red
 ---
+Claude Code | color=gray size=12 sfimage=sparkle sfcolor=gray
 T: claude-token - token | size=13
 5-hour: 0%  (resets in 2h 15m)
 Weekly: 65%  (resets in 2d 21h)
+At this pace it runs out in ~2d 5h, before the reset | color=orange size=11 sfimage=exclamationmark.triangle sfcolor=orange
 Fable (weekly): 1%  (resets in 2d 21h)
 Show in the menu bar | checked=true bash="<SELF>" param1=--hide param2=claude-token terminal=false refresh=true
 ---
 W: work - token | size=13
 5-hour: 93%  (resets in 45m) | color=red
+At this pace it runs out in ~20m, before the reset | color=red size=11 sfimage=exclamationmark.triangle sfcolor=red
 Weekly: 72%  (resets in 6d) | color=orange
+At this pace it runs out in ~9h 20m, before the reset | color=orange size=11 sfimage=exclamationmark.triangle sfcolor=orange
 Fable (weekly): 50%  (resets in 6d)
+At this pace it runs out in ~1d, before the reset | color=orange size=11 sfimage=exclamationmark.triangle sfcolor=orange
 Show in the menu bar | checked=true bash="<SELF>" param1=--hide param2=work terminal=false refresh=true
 ---
 Refreshes every 3 minutes | color=gray size=11
-Numbers: % of 5-hour / weekly / Fable weekly limit | color=gray size=11
-Version v<VERSION> | color=gray size=11 href=https://github.com/Kong-Travis/claude-usage-bar
+Bar numbers: % used of each limit, in the order above | color=gray size=11
+Version v<VERSION> | color=gray size=11 href=https://github.com/Kong-Travis/ai-usage-bar
 Collapse to an icon | bash="<SELF>" param1=--compact param2=on terminal=false refresh=true
 Chuyển sang tiếng Việt | bash="<SELF>" param1=--lang param2=vi terminal=false refresh=true
 Check for updates (up to date) | bash="<SELF>" param1=--check-update terminal=false refresh=true

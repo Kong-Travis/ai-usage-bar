@@ -69,7 +69,7 @@ check '[ "$RC2" = 0 ]' "second tray exited 0"
 check '[ ! -s "$OUT/second.err" ] && [ ! -s "$OUT/second.out" ]' "second tray exited quietly (no output at all)"
 check '[ "$WAITED" -ge 9 ]' "second tray waited about 10 s for the lock first"
 check 'grep -q "^REGISTERED" "$OUT/watcher.log"' "indicator registered with the StatusNotifierWatcher"
-check 'grep -q "XAyatanaLabel.: .Claude ?" "$OUT/watcher.log"' "indicator label shows the menu title"
+check 'grep -q "XAyatanaLabel.: .AI ?" "$OUT/watcher.log"' "indicator label shows the menu title"
 
 echo "--- unit tests with a display"
 cd "$HERE/.." && /usr/bin/python3 -m unittest test_tray_gtk 2>&1 | tail -4

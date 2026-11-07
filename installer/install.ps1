@@ -1,4 +1,7 @@
-# Installer for the "Claude Code usage" tray icon (Windows 10/11).
+# Installer for the "AI Usage" tray icon (Windows 10/11).
+# Legacy names are kept on purpose (%LOCALAPPDATA%\claude-usage, claude-usage.py, claude-usage.conf,
+# the Startup shortcut "Claude Code usage.lnk"): installs from before the rename self-update in
+# place, and a new shortcut name would start a second tray icon.
 # Double-click install.cmd next to this file, or run:
 #   powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1 [-Lang vi|en]
 # Language: -Lang, else the CLAUDE_USAGE_LANG environment variable, else a prompt.
@@ -15,13 +18,13 @@ $InstallDir = Join-Path $env:LOCALAPPDATA 'claude-usage'
 $PluginPath = Join-Path $InstallDir 'claude-usage.py'
 $ConfPath = Join-Path (Join-Path $env:USERPROFILE '.config') 'claude-usage.conf'
 $LogPath = Join-Path (Join-Path (Join-Path $env:USERPROFILE '.cache') 'claude-usage') 'last-run.log'
-$ShortcutPath = Join-Path ([Environment]::GetFolderPath('Startup')) 'Claude Code usage.lnk'
+$ShortcutPath = Join-Path ([Environment]::GetFolderPath('Startup')) 'Claude Code usage.lnk'  # legacy file name, kept on purpose
 
 # ---------- messages (one table per language) ----------
 
 $Messages = @{
     vi = @{
-        title         = 'Cài đặt "Claude Code usage" (biểu tượng ở khay hệ thống)'
+        title         = 'Cài đặt "AI Usage" (biểu tượng ở khay hệ thống)'
         step1         = '1/4  Kiểm tra Python (cần bản 3.9 trở lên)'
         py_found      = 'OK: Python {0} ({1})'
         py_missing    = 'Máy chưa có Python 3.9+. Đang cài Python 3.12 cho riêng tài khoản này (không cần quyền admin)...'
@@ -31,12 +34,12 @@ $Messages = @{
         py_installer  = 'Đang chạy bộ cài Python (chạy ngầm, chờ khoảng 1-2 phút)...'
         py_failed     = 'Không cài được Python. Cài tay từ https://www.python.org/downloads/ (tích "Add python.exe to PATH") rồi chạy lại file này.'
         pyw_missing   = 'Không tìm thấy pythonw.exe cạnh {0}. Cài lại Python từ python.org rồi chạy lại file này.'
-        step2         = '2/4  Cài plugin Claude Code usage'
+        step2         = '2/4  Cài plugin AI Usage'
         installed     = 'Đã cài: {0}'
         lang_saved    = 'Đã chọn tiếng Anh (dòng "language = en" trong {0}).'
         test_run      = 'Đang chạy thử...'
         test_result   = 'Di chuột lên biểu tượng sẽ thấy: {0}'
-        test_none     = 'Chưa tìm thấy tài khoản nào. Xem mục "Nếu thiếu tài khoản" bên dưới.'
+        test_none     = 'Chưa tìm thấy tài khoản Claude Code, Codex hay Antigravity nào. Xem mục "Nếu thiếu tài khoản" bên dưới.'
         test_failed   = 'Chạy thử bị lỗi (mã {0}): {1}'
         step3         = '3/4  Cho tự chạy khi đăng nhập Windows và mở biểu tượng'
         stopped       = 'Đã tắt bản cũ đang chạy.'
@@ -45,8 +48,9 @@ $Messages = @{
         step4         = '4/4  Cách dùng'
         guide         = @(
             'Biểu tượng hiện số % cao nhất trong các giới hạn, nền cam hoặc đỏ khi sắp chạm giới hạn.',
-            'Di chuột lên biểu tượng để thấy dạng "C 13/8/1  T 0/65/1": mỗi tài khoản là một chữ cái,',
-            'ba số lần lượt là % giới hạn 5 giờ / tuần / Fable tuần. Bấm vào biểu tượng để mở menu:',
+            'Di chuột lên biểu tượng để thấy dạng "C 13/8/1  Cx 78/73  Ag 0/0": mỗi tài khoản Claude là một chữ cái',
+            '(% giới hạn 5 giờ / tuần / Fable tuần), Cx là Codex (5 giờ / tuần), Ag là Antigravity (tuần, theo nhóm model).',
+            'Bấm vào biểu tượng để mở menu:',
             'tên tài khoản, còn bao lâu nữa thì reset, "Làm mới ngay", và "Cập nhật ngay" khi có bản mới.',
             '',
             'Không thấy biểu tượng? Windows hay giấu biểu tượng mới vào khu vực tràn (mũi tên ^ cạnh đồng hồ).',
@@ -57,7 +61,9 @@ $Messages = @{
             'Nếu hiện "?", bấm vào để xem dòng "Lỗi: ...", hoặc xem file {0}',
             '',
             'Nếu thiếu tài khoản:',
-            '- Đăng nhập trình duyệt: chạy `claude` một lần để đăng nhập.',
+            '- Claude Code, đăng nhập trình duyệt: chạy `claude` một lần để đăng nhập.',
+            '- Codex: cài codex CLI rồi chạy `codex login` (đăng nhập ChatGPT). Antigravity: cài agy CLI rồi đăng nhập.',
+            '  Hai loại này đọc hạn mức không tốn quota.',
             '- Token (claude setup-token): plugin tự tìm CLAUDE_CODE_OAUTH_TOKEN trong biến môi trường và',
             '  PowerShell profile. Nếu token để chỗ khác, thêm một dòng "tên = C:\đường\dẫn\file-token"',
             '  vào {1} rồi bấm "Làm mới ngay" trong menu.',
@@ -70,7 +76,7 @@ $Messages = @{
         error         = 'Lỗi: {0}'
     }
     en = @{
-        title         = 'Installing "Claude Code usage" (notification area icon)'
+        title         = 'Installing "AI Usage" (notification area icon)'
         step1         = '1/4  Checking Python (3.9 or newer)'
         py_found      = 'OK: Python {0} ({1})'
         py_missing    = 'Python 3.9+ was not found. Installing Python 3.12 for this account only (no admin rights needed)...'
@@ -80,12 +86,12 @@ $Messages = @{
         py_installer  = 'Running the Python installer (silently, 1-2 minutes)...'
         py_failed     = 'Could not install Python. Install it from https://www.python.org/downloads/ (tick "Add python.exe to PATH"), then run this file again.'
         pyw_missing   = 'pythonw.exe was not found next to {0}. Reinstall Python from python.org, then run this file again.'
-        step2         = '2/4  Installing the Claude Code usage plugin'
+        step2         = '2/4  Installing the AI Usage plugin'
         installed     = 'Installed: {0}'
         lang_saved    = 'English selected (line "language = en" in {0}).'
         test_run      = 'Test run...'
         test_result   = 'Hovering the icon will show: {0}'
-        test_none     = 'No account found yet. See "If an account is missing" below.'
+        test_none     = 'No Claude Code, Codex or Antigravity account found yet. See "If an account is missing" below.'
         test_failed   = 'The test run failed (exit code {0}): {1}'
         step3         = '3/4  Starting with Windows and showing the icon'
         stopped       = 'Stopped the copy that was already running.'
@@ -94,8 +100,9 @@ $Messages = @{
         step4         = '4/4  How to use it'
         guide         = @(
             'The icon shows the highest % among your limits, on orange or red when a limit is close.',
-            'Hover it to see something like "C 13/8/1  T 0/65/1": one letter per account, and the',
-            'three numbers are the % of the 5-hour / weekly / Fable weekly limit. Click the icon for the',
+            'Hover it to see something like "C 13/8/1  Cx 78/73  Ag 0/0": a letter per Claude account (% of the',
+            '5-hour / weekly / Fable weekly limit), Cx for Codex (5-hour / weekly), Ag for Antigravity (weekly',
+            'per model group). Click the icon for the',
             'menu: account names, time until each reset, "Refresh now", and "Update now" when a new version is out.',
             '',
             'No icon? Windows often hides new icons in the overflow area (the ^ arrow next to the clock).',
@@ -106,7 +113,9 @@ $Messages = @{
             'If it shows "?", click it and read the "Error: ..." line, or open {0}',
             '',
             'If an account is missing:',
-            '- Browser login: run `claude` once and log in.',
+            '- Claude Code browser login: run `claude` once and log in.',
+            '- Codex: install the codex CLI and run `codex login` (ChatGPT login). Antigravity: install the agy CLI',
+            '  and log in. Their checks cost no quota.',
             '- Token (claude setup-token): the plugin looks for CLAUDE_CODE_OAUTH_TOKEN in environment',
             '  variables and PowerShell profiles. If the token lives elsewhere, add a line',
             '  "name = C:\path\to\token-file" to {1}, then click "Refresh now" in the menu.',
@@ -302,7 +311,7 @@ function Test-Plugin([string]$Python) {
         $first = ''
         if ($out.Count -gt 0) { $first = ($out[0] -split ' \|')[0] }
         Info (M 'test_result' $first)
-        if ($first -eq 'Claude ?') { Info (M 'test_none') }
+        if ($first -eq 'AI ?') { Info (M 'test_none') }
     } catch {
         Info (M 'test_failed' '?' $_.Exception.Message)
     } finally {
@@ -333,7 +342,7 @@ function New-StartupShortcut([string]$Pythonw) {
     $link.TargetPath = $Pythonw
     $link.Arguments = '"' + $PluginPath + '" --tray'
     $link.WorkingDirectory = $InstallDir
-    $link.Description = 'Claude Code usage'
+    $link.Description = 'AI Usage'
     $link.Save()
     Info (M 'shortcut' $ShortcutPath)
 }

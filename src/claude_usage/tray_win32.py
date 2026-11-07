@@ -27,7 +27,8 @@ class _W32:
     WM_RBUTTONUP = 0x0205
     WM_APP = 0x8000
     NIM_ADD, NIM_MODIFY, NIM_DELETE = 0, 1, 2
-    NIF_MESSAGE, NIF_ICON, NIF_TIP = 0x1, 0x2, 0x4
+    NIF_MESSAGE, NIF_ICON, NIF_TIP, NIF_INFO = 0x1, 0x2, 0x4, 0x10
+    NIIF_WARNING = 0x2
     MF_STRING, MF_GRAYED, MF_CHECKED, MF_SEPARATOR = 0x0, 0x1, 0x8, 0x800
     TPM_RIGHTBUTTON, TPM_NONOTIFY, TPM_RETURNCMD = 0x2, 0x80, 0x100
     SM_CXSMICON = 49
@@ -42,24 +43,39 @@ Win32Rgb = Tuple[int, int, int]
 Win32MenuEntry = Tuple[int, int, str]  # (MF_* flags, command id or 0, label)
 
 WIN32_TIP_MAX = 127                    # szTip holds 128 UTF-16 units including the NUL
+WIN32_INFO_TITLE_MAX = 63              # szInfoTitle: 64 units with the NUL
+WIN32_INFO_MAX = 255                   # szInfo: 256 units with the NUL
 WIN32_TEXT_RGB: Win32Rgb = (0xFF, 0xFF, 0xFF)
 WIN32_NEUTRAL_RGB: Win32Rgb = (0x45, 0x5A, 0x64)
 WIN32_ALERT_RGB = {RED: (0xC6, 0x28, 0x28), ORANGE: (0xE6, 0x5C, 0x00)}
 
 # Strings of this frontend only; menu text arrives already translated in the Menu.
 WIN32_TEXT = {
-    "win32_tip_starting": {VI: "Claude: đang khởi động...", EN: "Claude: starting..."},
+    "win32_tip_starting": {VI: "AI: đang khởi động...", EN: "AI: starting..."},
 }
 
 
 # ---------- pure helpers (tested on every OS) ----------
 
+def win32_fit(text: str, limit: int) -> str:
+    """`text` without NULs, cut to `limit` UTF-16 units (a fixed WCHAR field minus its NUL)."""
+    text = text.replace("\0", "")[:limit]
+    while len(text.encode("utf-16-le")) // 2 > limit:  # characters outside the BMP
+        text = text[:-1]
+    return text
+
+
 def win32_tooltip(title: str) -> str:
     """The tray tooltip: the menu title cut to what szTip can hold."""
-    tip = title.replace("\0", "")[:WIN32_TIP_MAX]
-    while len(tip.encode("utf-16-le")) // 2 > WIN32_TIP_MAX:  # characters outside the BMP
-        tip = tip[:-1]
-    return tip
+    return win32_fit(title, WIN32_TIP_MAX)
+
+
+def win32_balloon_fields(title: str, body: str) -> Dict[str, object]:
+    """NOTIFYICONDATAW members for a NIM_MODIFY that shows a warning balloon (a toast on
+    Windows 10 and 11) and leaves the icon and tooltip as they are."""
+    return {"uFlags": _W32.NIF_INFO, "szInfoTitle": win32_fit(title, WIN32_INFO_TITLE_MAX),
+            "szInfo": win32_fit(body, WIN32_INFO_MAX) or " ",  # an empty szInfo hides it
+            "dwInfoFlags": _W32.NIIF_WARNING}
 
 
 def win32_icon_text(worst: Optional[float]) -> str:
@@ -144,7 +160,7 @@ def _w32_report_error() -> None:
 class Win32TrayBackend(TrayBackend):
     """A notification-area icon showing the worst percentage, with the menu on click."""
 
-    MUTEX_NAME = "Local\\claude-usage-bar-tray"
+    MUTEX_NAME = "Local\\claude-usage-bar-tray"  # legacy name: one tray across upgrades
     WAIT_FOR_OTHER_SECONDS = 10.0  # a self-update starts the new tray just before the old quits
     WM_WAKE = _W32.WM_APP + 1      # call_soon has queued work
     WM_TRAY = _W32.WM_APP + 2      # mouse events on the icon
@@ -223,6 +239,11 @@ class Win32TrayBackend(TrayBackend):
         self._quitting = True
         self._remove_icon()
         self._api.post_quit()
+
+    def notify(self, title: str, body: str) -> None:
+        if self._hwnd is None or self._quitting or not self._icon_added:
+            return  # a balloon belongs to the icon: nothing to attach it to yet
+        self._api.balloon(self._hwnd, self.ICON_ID, win32_balloon_fields(title, body))
 
     # window messages
 
@@ -549,6 +570,16 @@ class _Win32Api:
             data.hIcon = hicon
             data.szTip = tip
         return bool(self.fn.Shell_NotifyIconW(operation, self._ct.byref(data)))
+
+    def balloon(self, hwnd, icon_id: int, fields: Dict[str, object]) -> bool:
+        """NIM_MODIFY the icon with `fields` (see win32_balloon_fields)."""
+        data = self.NOTIFYICONDATAW()
+        data.cbSize = self._ct.sizeof(data)
+        data.hWnd = hwnd
+        data.uID = icon_id
+        for name, value in fields.items():
+            setattr(data, name, value)
+        return bool(self.fn.Shell_NotifyIconW(_W32.NIM_MODIFY, self._ct.byref(data)))
 
     def create_icon(self, text: str, background: Win32Rgb, foreground: Win32Rgb):
         """An HICON with `text` in white on a rounded square, sized for the tray."""

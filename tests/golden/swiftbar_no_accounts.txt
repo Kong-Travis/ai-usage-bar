@@ -1,6 +1,6 @@
-Claude ? |
+AI ? |
 ---
-Không tìm thấy tài khoản Claude Code nào
-Đăng nhập bằng `claude`, hoặc khai báo token trong ~/.config/claude-usage.conf | size=11
+Chưa tìm thấy tài khoản Claude Code, Codex hay Antigravity nào
+Đăng nhập bằng `claude`, `codex login` hoặc `agy`, hoặc khai báo token trong ~/.config/claude-usage.conf | size=11
 ---
 Switch to English | bash="<SELF>" param1=--lang param2=en terminal=false refresh=true

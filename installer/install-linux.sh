@@ -1,8 +1,11 @@
 #!/bin/bash
-# Installer for the "Claude Code usage" panel plugin on Linux.
+# Installer for the "AI Usage" panel plugin on Linux.
+# Legacy names are kept on purpose (claude-usage.1m.py, claude-usage.py, claude-usage.conf,
+# claude-usage.desktop, ~/.cache/claude-usage): installs from before the rename self-update in
+# place, so renaming them would leave two icons.
 # GNOME: an Argos plugin in the top bar. Other desktops (KDE, XFCE, Cinnamon, MATE, Budgie...):
 # a tray icon that starts at login.
-# Run: bash claude-usage-install-linux.sh [--tray | --argos] [--lang vi|en]
+# Run: bash ai-usage-install-linux.sh [--tray | --argos] [--lang vi|en]
 # CLAUDE_USAGE_NONINTERACTIVE=1 answers every question with its default and never uses sudo.
 set -u
 
@@ -30,8 +33,8 @@ m() {
     usage)          vi="Cách dùng: bash %s [--tray | --argos] [--lang vi|en]"
                     en="Usage: bash %s [--tray | --argos] [--lang vi|en]" ;;
     error)          vi="Lỗi: %s"; en="Error: %s" ;;
-    not_linux)      vi="Bộ cài này chỉ chạy trên Linux. Trên macOS hãy dùng Claude-Usage.dmg."
-                    en="This installer only runs on Linux. On macOS use Claude-Usage.dmg." ;;
+    not_linux)      vi="Bộ cài này chỉ chạy trên Linux. Trên macOS hãy dùng AI-Usage.dmg."
+                    en="This installer only runs on Linux. On macOS use AI-Usage.dmg." ;;
     step_python)    vi="1/4  Kiểm tra python3"; en="1/4  Checking python3" ;;
     no_python)      vi="Không tìm thấy /usr/bin/python3. Cài python3 của bản phân phối (vd: sudo apt install python3) rồi chạy lại."
                     en="/usr/bin/python3 not found. Install your distribution's python3 (e.g. sudo apt install python3), then run this again." ;;
@@ -77,7 +80,7 @@ m() {
     step_start)     vi="4/4  Chạy thử"; en="4/4  Trying it out" ;;
     test_run)       vi="Đang chạy thử..."; en="Running it once..." ;;
     shows)          vi="Sẽ hiện: %s"; en="It will show: %s" ;;
-    no_accounts)    vi="Chưa tìm thấy tài khoản nào. Xem mục \"Nếu thiếu tài khoản\" bên dưới."
+    no_accounts)    vi="Chưa tìm thấy tài khoản Claude Code, Codex hay Antigravity nào. Xem mục \"Nếu thiếu tài khoản\" bên dưới."
                     en="No account found yet. See \"Missing an account\" below." ;;
     tray_started)   vi="Biểu tượng đã chạy (PID %s)."; en="The tray icon is running (PID %s)." ;;
     tray_died)      vi="Biểu tượng không chạy được. Nhật ký:"; en="The tray icon did not start. Log:" ;;
@@ -335,8 +338,8 @@ else
   cat > "$AUTOSTART" <<EOF
 [Desktop Entry]
 Type=Application
-Name=Claude Code usage
-Comment=Claude Code plan usage in the system tray
+Name=AI Usage
+Comment=Claude Code, Codex and Antigravity usage limits in the system tray
 Exec="$PY" "$TRAY_PLUGIN" --tray
 Icon=utilities-system-monitor
 Terminal=false
@@ -361,7 +364,7 @@ if command -v timeout >/dev/null 2>&1; then T="timeout 90"; else T=""; fi
 OUT=$($T "$PY" "$PLUGIN" 2>&1 | head -1 | sed 's/ |.*//')
 info "$(m shows "$OUT")"
 case "$OUT" in
-  "Claude ?") info "$(m no_accounts)" ;;
+  "AI ?") info "$(m no_accounts)" ;;
 esac
 
 if [ "$MODE" = tray ]; then
@@ -392,8 +395,9 @@ fi
 printf '\n\033[1m%s\033[0m\n' "$(m done)"
 if [ "$UI_LANG" = en ]; then
   cat <<'EOF'
-  The panel shows something like "C 87/88/94  T 79/17/0": one letter per account, then the
-  % of the 5-hour / weekly / Fable weekly limit. Click it for account names and how long until
+  The panel shows something like "C 87/88/94  Cx 78/73  Ag 0/0": a letter per Claude account
+  (% of the 5-hour / weekly / Fable weekly limit), Cx for Codex (5-hour / weekly), Ag for
+  Antigravity (weekly per model group). Click it for account names and how long until
   each limit resets. It refreshes every 3 minutes; when a new version is out, the menu offers
   "Update now". If it shows "?", click it to read the "Error: ..." line, or look at
   ~/.cache/claude-usage/last-run.log.
@@ -412,7 +416,9 @@ EOF
   cat <<'EOF'
 
   Missing an account:
-  - Browser login: run `claude` once to log in (it is read from ~/.claude/.credentials.json).
+  - Claude Code browser login: run `claude` once to log in (it is read from ~/.claude/.credentials.json).
+  - Codex: install the codex CLI and run `codex login` (ChatGPT login). Antigravity: install
+    the agy CLI and log in. Their checks cost no quota.
   - Token (claude setup-token): aliases/exports of CLAUDE_CODE_OAUTH_TOKEN in ~/.bashrc,
     ~/.zshrc... and scripts in ~/bin are found automatically. Elsewhere: add a line
     "name = /path/to/token-file" to ~/.config/claude-usage.conf, then click "Refresh now".
@@ -425,8 +431,9 @@ EOF
   fi
 else
   cat <<'EOF'
-  Thanh hiện dạng "C 87/88/94  T 79/17/0": mỗi tài khoản là một chữ cái, ba số lần lượt là
-  % giới hạn 5 giờ / tuần / Fable tuần. Bấm vào để xem tên tài khoản và còn bao lâu nữa thì
+  Thanh hiện dạng "C 87/88/94  Cx 78/73  Ag 0/0": mỗi tài khoản Claude là một chữ cái
+  (% giới hạn 5 giờ / tuần / Fable tuần), Cx là Codex (5 giờ / tuần), Ag là Antigravity
+  (tuần, theo từng nhóm model). Bấm vào để xem tên tài khoản và còn bao lâu nữa thì
   reset. Tự cập nhật mỗi 3 phút, có bản mới thì menu hiện nút "Cập nhật ngay". Nếu hiện "?",
   bấm vào để xem dòng "Lỗi: ..." hoặc xem file ~/.cache/claude-usage/last-run.log.
 EOF
@@ -445,7 +452,9 @@ EOF
   cat <<'EOF'
 
   Nếu thiếu tài khoản:
-  - Đăng nhập trình duyệt: chạy `claude` một lần để đăng nhập (đọc từ ~/.claude/.credentials.json).
+  - Claude Code, đăng nhập trình duyệt: chạy `claude` một lần để đăng nhập (đọc từ ~/.claude/.credentials.json).
+  - Codex: cài codex CLI rồi chạy `codex login` (đăng nhập ChatGPT). Antigravity: cài agy CLI
+    rồi đăng nhập. Hai loại này đọc hạn mức không tốn quota.
   - Token (claude setup-token): plugin tự tìm alias/export CLAUDE_CODE_OAUTH_TOKEN trong
     ~/.bashrc, ~/.zshrc... và script trong ~/bin. Nếu token để chỗ khác, thêm một dòng
     "tên = /đường/dẫn/file-token" vào ~/.config/claude-usage.conf rồi bấm "Làm mới ngay".

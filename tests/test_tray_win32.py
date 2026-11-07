@@ -48,6 +48,21 @@ class PureHelpers(unittest.TestCase):
         self.assertLessEqual(len(tip.encode("utf-16-le")) // 2, 127)
         self.assertEqual(len(tip), 63)
 
+    def test_balloon_is_a_warning_that_leaves_icon_and_tooltip_alone(self):
+        fields = tw.win32_balloon_fields("Claude Code", "C claude, 5 giờ: đã dùng 92%")
+        self.assertEqual(fields, {"uFlags": tw._W32.NIF_INFO, "szInfoTitle": "Claude Code",
+                                  "szInfo": "C claude, 5 giờ: đã dùng 92%",
+                                  "dwInfoFlags": tw._W32.NIIF_WARNING})
+        self.assertEqual((tw._W32.NIF_INFO, tw._W32.NIIF_WARNING), (0x10, 0x2))
+
+    def test_balloon_text_fits_its_fixed_size_fields(self):
+        # ctypes raises ValueError for a string longer than a WCHAR array.
+        fields = tw.win32_balloon_fields("t" * 100, "\U0001F600" * 200)
+        self.assertEqual(fields["szInfoTitle"], "t" * 63)
+        self.assertLessEqual(len(fields["szInfo"].encode("utf-16-le")) // 2, 255)
+        self.assertEqual(tw.win32_balloon_fields("a\0b", "")["szInfo"], " ")  # empty hides it
+        self.assertEqual(tw.win32_balloon_fields("a\0b", "x")["szInfoTitle"], "ab")
+
     def test_icon_text_is_the_rounded_worst_or_question_mark(self):
         self.assertEqual(tw.win32_icon_text(None), "?")
         self.assertEqual(tw.win32_icon_text(0), "0")
@@ -193,6 +208,10 @@ class FakeApi:
         self.live_icons.discard(hicon)
         self.calls.append(("destroy_icon", hicon))
 
+    def balloon(self, hwnd, icon_id, fields):
+        self.calls.append(("balloon", icon_id, fields))
+        return True
+
     def popup_menu(self, hwnd, entries):
         self.calls.append(("popup_menu", list(entries)))
         return self.chosen_command
@@ -259,12 +278,12 @@ class BackendBehaviour(unittest.TestCase):
         backend = tw.Win32TrayBackend(Translator("en"), api=api)
         backend._hwnd = 0xABC
         backend._sync_icon()
-        self.assertEqual(api.named("notify")[0][3], "Claude: starting...")
+        self.assertEqual(api.named("notify")[0][3], "AI: starting...")
         api2 = FakeApi()
         backend2 = tw.Win32TrayBackend(api=api2)
         backend2._hwnd = 0xABC
         backend2._sync_icon()
-        self.assertEqual(api2.named("notify")[0][3], "Claude: đang khởi động...")
+        self.assertEqual(api2.named("notify")[0][3], "AI: đang khởi động...")
 
     def test_failed_add_is_retried_on_next_show(self):
         backend, api = self.started(notify_ok=False)
@@ -359,6 +378,23 @@ class BackendBehaviour(unittest.TestCase):
         backend.show(sample_menu())  # a late show after quit must not re-add the icon
         self.assertEqual(api.named("notify")[-1][1], self.W.NIM_DELETE)
 
+    def test_notify_shows_a_balloon_on_the_added_icon(self):
+        backend, api = self.started()
+        backend.show(sample_menu())
+        backend.notify("Codex", "Cx codex, Tuần: đã hết hạn mức")
+        self.assertEqual(api.named("balloon"), [
+            ("balloon", backend.ICON_ID, tw.win32_balloon_fields("Codex", "Cx codex, Tuần: đã hết hạn mức"))])
+
+    def test_notify_without_an_icon_or_after_quit_does_nothing(self):
+        backend, api = self.started(notify_ok=False)  # Explorer not ready: icon not added
+        backend.show(sample_menu())
+        backend.notify("Codex", "x")
+        api.notify_ok = True
+        backend.show(sample_menu())
+        backend.quit()
+        backend.notify("Codex", "x")
+        self.assertEqual(api.named("balloon"), [])
+
     def test_unknown_messages_go_to_defwindowproc(self):
         backend, _ = self.started()
         self.assertIsNone(backend._on_message(0x0001, 0, 0))
@@ -421,6 +457,14 @@ class RealWin32(unittest.TestCase):
         api = tw._Win32Api()
         expected = 976 if ctypes.sizeof(ctypes.c_void_p) == 8 else 956
         self.assertEqual(ctypes.sizeof(api.NOTIFYICONDATAW), expected)
+
+    def test_balloon_fields_fit_the_real_struct(self):
+        api = tw._Win32Api()
+        data = api.NOTIFYICONDATAW()
+        for name, value in tw.win32_balloon_fields("t" * 100, "b" * 400).items():
+            setattr(data, name, value)  # raises ValueError if a string is too long
+        self.assertEqual((data.uFlags, data.dwInfoFlags), (0x10, 0x2))
+        self.assertEqual(len(data.szInfo), 255)
 
     def test_icons_can_be_drawn_and_destroyed(self):
         api = tw._Win32Api()

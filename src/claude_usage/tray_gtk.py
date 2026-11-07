@@ -9,10 +9,13 @@ from __future__ import annotations
 import os
 import shutil
 import sys
+import threading
 import time
 from typing import Callable, Optional, Sequence, Tuple
 
 from .i18n import EN, VI, Translator
+from .infra import CliLocator
+from .notify import Notifier, notify_send_notifier
 from .tray import TrayBackend
 from .view import ORANGE, RED, Action, Menu, MenuItem
 
@@ -32,7 +35,7 @@ GTK_TEXT = {
         EN: "Cannot open the display (no DISPLAY or WAYLAND_DISPLAY). "
             "Run this from a graphical session.",
     },
-    "gtk_title": {VI: "Hạn mức Claude Code", EN: "Claude Code usage"},
+    "gtk_title": {VI: "Hạn mức AI", EN: "AI Usage"},
 }
 
 # Install commands by package manager, for the "missing gi" message.
@@ -148,7 +151,9 @@ class GtkTrayBackend(TrayBackend):
     shows the severity, and the menu is rebuilt on every show()."""
 
     def __init__(self, tr: Optional[Translator] = None, lock_path: Optional[str] = None,
-                 lock_wait: float = GTK_LOCK_WAIT_SECONDS):
+                 lock_wait: float = GTK_LOCK_WAIT_SECONDS, notifier: Optional[Notifier] = None):
+        """notifier: shows notify(); notify-send when installed by default. A desktop
+        notification works the same next to an AppIndicator as without one."""
         self._tr = (tr or Translator()).with_catalog(GTK_TEXT)
         try:
             gtk_require_versions()  # fail fast, before waiting for the lock
@@ -161,6 +166,8 @@ class GtkTrayBackend(TrayBackend):
         self._indicator = None
         self._handler: Callable[[Action], None] = lambda action: None
         self._shown: Optional[Tuple[Sequence[MenuItem], str]] = None
+        self._notifier = notifier or notify_send_notifier(
+            CliLocator(os.path.expanduser("~"), os.environ, windows=False))
 
     # ---------- TrayBackend ----------
 
@@ -213,6 +220,10 @@ class GtkTrayBackend(TrayBackend):
 
     def quit(self) -> None:
         self._gtk.main_quit()
+
+    def notify(self, title: str, body: str) -> None:
+        # notify-send waits for the notification daemon: never let it stall the UI thread.
+        threading.Thread(target=self._notifier.notify, args=(title, body), daemon=True).start()
 
     # ---------- helpers ----------
 

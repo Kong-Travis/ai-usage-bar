@@ -47,6 +47,20 @@ class TrayBackend(ABC):
     @abstractmethod
     def quit(self) -> None: ...
 
+    def notify(self, title: str, body: str) -> None:
+        """Show a desktop notification. Optional: by default a backend shows none."""
+
+
+class TrayNotifier:
+    """A Notifier for code running off the UI thread (the refresh worker): hands the
+    notification to the tray backend on its UI thread."""
+
+    def __init__(self, backend: TrayBackend):
+        self._backend = backend
+
+    def notify(self, title: str, body: str) -> None:
+        self._backend.call_soon(lambda: self._backend.notify(title, body))
+
 
 class TrayController:
     """Refreshes the tray every minute and runs menu actions.
@@ -162,11 +176,11 @@ def with_quit(menu: Menu, tr: Translator) -> Menu:
 
 
 def loading_menu(tr: Translator) -> Menu:
-    return Menu("Claude ...", None, False, None, (MenuItem(tr("loading")), SEPARATOR, quit_item(tr)))
+    return Menu("AI ...", None, False, None, (MenuItem(tr("loading")), SEPARATOR, quit_item(tr)))
 
 
 def error_menu(e: Exception, tr: Translator) -> Menu:
-    return Menu("Claude ?", None, False, None, (
+    return Menu("AI ?", None, False, None, (
         MenuItem(tr("error_line", error="%s: %s" % (type(e).__name__, str(e)[:160])), color="gray"),
         MenuItem(tr("refresh_now"), action=Action(REFRESH)),
         SEPARATOR, quit_item(tr)))

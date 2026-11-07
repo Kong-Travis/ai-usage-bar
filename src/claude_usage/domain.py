@@ -20,6 +20,7 @@ class SystemClock:
 # Providers: the coding agents whose limits are shown.
 CLAUDE, CODEX, AGY = "claude", "codex", "agy"
 PROVIDERS = (CLAUDE, CODEX, AGY)  # menu order
+PROVIDER_NAMES = {CLAUDE: "Claude Code", CODEX: "Codex", AGY: "Antigravity"}
 
 # Window kinds every provider shares. Anything else is shown under its own name.
 FIVE_HOUR, WEEKLY = "5h", "7d"

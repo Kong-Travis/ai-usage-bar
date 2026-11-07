@@ -19,6 +19,7 @@ PREFIX = "anthropic-ratelimit-unified-"
 
 def claude_usage(five, five_reset, weekly, weekly_reset, models=()):
     """A Claude Usage: 5-hour, weekly, then (name, pct, reset) per-model weekly windows."""
+    import srcpath  # noqa: F401  (puts src/ on sys.path when a test module did not)
     from claude_usage.domain import (FIVE_HOUR, FIVE_HOUR_SECONDS, WEEK_SECONDS, WEEKLY, Usage,
                                      Window)
     return Usage((Window(FIVE_HOUR, five, five_reset, FIVE_HOUR_SECONDS),

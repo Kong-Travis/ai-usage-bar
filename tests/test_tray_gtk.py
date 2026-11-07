@@ -7,6 +7,7 @@ import os
 import shutil
 import sys
 import tempfile
+import threading
 import unittest
 from contextlib import redirect_stderr
 from unittest import mock
@@ -163,6 +164,23 @@ class SingleInstanceLock(unittest.TestCase):
 
     def test_default_path(self):
         self.assertEqual(tray_gtk.gtk_lock_path("/home/u"), "/home/u/.cache/claude-usage/tray.lock")
+
+
+@unittest.skipUnless(gi_available(), "PyGObject with AppIndicator3 is not installed")
+class Notifications(unittest.TestCase):
+    def test_notify_goes_to_the_desktop_notifier_off_the_ui_thread(self):
+        shown, done = [], threading.Event()
+
+        class Recording:
+            def notify(self, title, body):
+                shown.append((title, body, threading.current_thread() is ui_thread))
+                done.set()
+
+        ui_thread = threading.current_thread()
+        backend = tray_gtk.GtkTrayBackend(Translator("en"), notifier=Recording())
+        backend.notify("Antigravity", "Ag agy, Weekly: limit reached")
+        self.assertTrue(done.wait(5))
+        self.assertEqual(shown, [("Antigravity", "Ag agy, Weekly: limit reached", False)])
 
 
 @unittest.skipUnless(gi_available(), "PyGObject with AppIndicator3 is not installed")

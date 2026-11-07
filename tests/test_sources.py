@@ -100,6 +100,23 @@ class UserConfigTest(TempHome):
         self.assertTrue(cfg.show_logins)
         self.assertEqual(cfg.token_files, ())
 
+    def test_thresholds_notify_and_provider_switches(self):
+        cfg = self.load("warn = 60\ncrit = 85\nnotify = off\ncodex = off\nagy = on\n")
+        self.assertEqual((cfg.warn, cfg.crit, cfg.notify), (60, 85, False))
+        self.assertEqual(cfg.providers_off, ("codex",))
+        self.assertEqual(cfg.token_files, ())
+
+    def test_bad_thresholds_fall_back_to_the_defaults(self):
+        for text in ("warn = 95\ncrit = 90\n", "warn = abc\n", "crit = 0\n", "crit = 150\n"):
+            with self.subTest(text=text):
+                cfg = self.load(text)
+                self.assertEqual((cfg.warn, cfg.crit), (UserConfig().warn, UserConfig().crit))
+
+    def test_a_provider_name_with_a_path_is_still_a_claude_token_file(self):
+        cfg = self.load("codex = ~/t/codex.txt\n")
+        self.assertEqual(cfg.token_files, (("codex", self.home + "/t/codex.txt"),))
+        self.assertEqual(cfg.providers_off, ())
+
     def test_missing_file_gives_defaults(self):
         cfg = UserConfig.load(self.path("absent.conf"), self.home)
         self.assertEqual(cfg, UserConfig())

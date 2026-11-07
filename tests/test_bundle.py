@@ -70,7 +70,7 @@ class BundleShape(unittest.TestCase):
             out = subprocess.run([sys.executable, "-I", path], cwd=tmp, env=env,
                                  capture_output=True, text=True, encoding="utf-8", timeout=60)
             self.assertEqual(out.returncode, 0, out.stderr)
-            self.assertTrue(out.stdout.startswith("Claude ? |"), out.stdout)
+            self.assertTrue(out.stdout.startswith("AI ? |"), out.stdout)
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
             shutil.rmtree(home, ignore_errors=True)
@@ -109,7 +109,7 @@ class OldReleaseCanUpdate(unittest.TestCase):
             run = subprocess.run([sys.executable, "-I", old_path], env=env, cwd=tmp,
                                  capture_output=True, text=True, encoding="utf-8", timeout=60)
             self.assertEqual(run.returncode, 0, run.stderr)
-            self.assertIn("Claude ?", run.stdout)
+            self.assertIn("AI ?", run.stdout)
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 

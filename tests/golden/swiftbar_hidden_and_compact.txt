@@ -2,21 +2,26 @@
 ---
 Mở rộng (hiện số liệu) | bash="<SELF>" param1=--compact param2=off terminal=false refresh=true
 ---
+Claude Code | color=gray size=12 sfimage=sparkle sfcolor=gray
 T: claude-token - token | size=13
 5 giờ: 0%  (reset sau 2 giờ 15 phút)
 Tuần: 65%  (reset sau 2 ngày 21 giờ)
+Theo đà này sẽ hết sau ~2 ngày 5 giờ, trước khi reset | color=orange size=11 sfimage=exclamationmark.triangle sfcolor=orange
 Fable (tuần): 1%  (reset sau 2 ngày 21 giờ)
 Hiện trên thanh menu | bash="<SELF>" param1=--show param2=claude-token terminal=false refresh=true
 ---
 W: work - token | size=13
 5 giờ: 93%  (reset sau 45 phút) | color=red
+Theo đà này sẽ hết sau ~20 phút, trước khi reset | color=red size=11 sfimage=exclamationmark.triangle sfcolor=red
 Tuần: 72%  (reset sau 6 ngày) | color=orange
+Theo đà này sẽ hết sau ~9 giờ 20 phút, trước khi reset | color=orange size=11 sfimage=exclamationmark.triangle sfcolor=orange
 Fable (tuần): 50%  (reset sau 6 ngày)
+Theo đà này sẽ hết sau ~1 ngày, trước khi reset | color=orange size=11 sfimage=exclamationmark.triangle sfcolor=orange
 Hiện trên thanh menu | checked=true bash="<SELF>" param1=--hide param2=work terminal=false refresh=true
 ---
 Cập nhật mỗi 3 phút | color=gray size=11
-Thứ tự số: % giới hạn 5 giờ / tuần / Fable tuần | color=gray size=11
-Phiên bản v<VERSION> | color=gray size=11 href=https://github.com/Kong-Travis/claude-usage-bar
+Số trên thanh: % đã dùng của từng hạn mức, theo thứ tự ở trên | color=gray size=11
+Phiên bản v<VERSION> | color=gray size=11 href=https://github.com/Kong-Travis/ai-usage-bar
 Switch to English | bash="<SELF>" param1=--lang param2=en terminal=false refresh=true
 Kiểm tra cập nhật (đã là bản mới nhất) | bash="<SELF>" param1=--check-update terminal=false refresh=true
 Làm mới ngay | bash="<SELF>" param1=--force terminal=false refresh=true

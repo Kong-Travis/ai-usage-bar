@@ -1,10 +1,10 @@
 """Composition root: OS detection and which sources each OS gets."""
 import srcpath  # noqa: F401  (must come first)
 
-import inspect
 import json
 import os
 import shutil
+import sys
 import tempfile
 import time
 import unittest
@@ -12,7 +12,7 @@ from unittest import mock
 
 from claude_usage import platform_setup
 from claude_usage.infra import HttpResponse
-from claude_usage.platform_setup import (LINUX, MACOS, WINDOWS, Host, build, build_sources,
+from claude_usage.platform_setup import (LINUX, MACOS, WINDOWS, Host, build, build_claude_sources,
                                          detect_os)
 from claude_usage.sources import (ConfTokenSource, CredentialsFileSource, EnvTokenSource, FallbackSource,
                                   KeychainSource, ShellTokenSource, UserConfig)
@@ -33,11 +33,8 @@ class FakeClock:
 
 
 def call_build_sources(host, config, clock):
-    """build_sources takes a translator in newer versions; pass one when it asks."""
-    if "tr" in inspect.signature(build_sources).parameters:
-        from claude_usage.i18n import Translator
-        return build_sources(host, config, clock, Translator())
-    return build_sources(host, config, clock)
+    from claude_usage.i18n import Translator
+    return build_claude_sources(host, config, clock, Translator())
 
 
 class DetectOs(unittest.TestCase):
@@ -215,11 +212,75 @@ class BuildTest(TempHome):
         # The result is cached under the home dir, and the run log is written next to it.
         self.assertTrue(os.path.isfile(os.path.join(self.home, ".cache", "claude-usage", "last-run.log")))
 
+    def fake_cli(self, name, script):
+        """An executable `name` in ~/.local/bin that runs tests/<script> like the real CLI."""
+        here = os.path.dirname(os.path.abspath(__file__))
+        path = self.write(".local/bin/" + name, "#!/bin/sh\nexec '%s' '%s' \"$@\"\n"
+                          % (sys.executable, os.path.join(here, script)))
+        os.chmod(path, 0o755)
+
+    @unittest.skipIf(os.name == "nt", "fake CLIs are shell scripts")
+    def test_codex_and_agy_accounts_flow_from_discovery_to_the_menu(self):
+        # The real flow with the real CLIs replaced: found on a minimal PATH (as SwiftBar runs
+        # it), discovered from their home folders, read over their own protocols, then shown.
+        self.write(".config/claude-usage.conf", "keychain = off\nci = ~/t.txt\n")
+        self.write("t.txt", tok("CI"))
+        self.write(".codex/auth.json", json.dumps({"auth_mode": "chatgpt", "tokens": {"a": "b"}}))
+        os.makedirs(os.path.join(self.home, ".gemini", "antigravity-cli"))
+        self.fake_cli("codex", "fake_codex.py")
+        self.fake_cli("agy", "fake_agy.py")
+        clock = FakeClock()
+        env = {"PATH": "/usr/bin:/bin", "HOME": self.home}
+        services = build(self.host(MACOS, env), clock=clock, http=FakeHttp(clock))
+        menu = services.app.menu()
+        texts = [i.text for i in menu.items]
+        self.assertEqual(menu.title.split()[0::2], ["C", "Cx", "Ag"])
+        self.assertTrue(any("x@y.com" in t for t in texts), texts)
+        self.assertTrue(any("Gemini" in t for t in texts), texts)
+
+    @unittest.skipIf(os.name == "nt", "fake CLIs are shell scripts")
+    def test_a_limit_past_crit_notifies_once_unless_the_account_is_hidden(self):
+        # The fake Codex reports 78% of its 5-hour limit, past crit = 75.
+        self.write(".codex/auth.json", json.dumps({"auth_mode": "chatgpt", "tokens": {"a": "b"}}))
+        self.fake_cli("codex", "fake_codex.py")
+        clock = FakeClock()
+        host = self.host(MACOS, {"PATH": "/usr/bin:/bin", "HOME": self.home})
+
+        class Recorder:
+            def __init__(self):
+                self.sent = []
+
+            def notify(self, title, body):
+                self.sent.append((title, body))
+
+        hidden = Recorder()
+        self.write(".config/claude-usage.conf", "keychain = off\ncrit = 75\nhide = codex\n")
+        build(host, clock=clock, http=FakeHttp(clock), notifier=hidden).app.menu()
+        self.assertEqual(hidden.sent, [])
+
+        shown = Recorder()
+        self.write(".config/claude-usage.conf", "keychain = off\ncrit = 75\n")
+        for _ in range(2):  # the second menu must not repeat the alert
+            build(host, clock=clock, http=FakeHttp(clock), notifier=shown).app.menu()
+        self.assertEqual([title for title, _ in shown.sent], ["Codex"])
+        self.assertIn("78%", shown.sent[0][1])
+
+    def test_providers_can_be_switched_off(self):
+        self.write(".config/claude-usage.conf", "keychain = off\ncodex = off\nagy = off\n")
+        self.write(".codex/auth.json", json.dumps({"auth_mode": "chatgpt", "tokens": {"a": "b"}}))
+        os.makedirs(os.path.join(self.home, ".gemini", "antigravity-cli"))
+        self.fake_cli("codex", "fake_codex.py")
+        self.fake_cli("agy", "fake_agy.py")
+        clock = FakeClock()
+        services = build(self.host(MACOS, {"PATH": "/usr/bin:/bin", "HOME": self.home}),
+                         clock=clock, http=FakeHttp(clock))
+        self.assertEqual(services.app.menu().title, "AI ?")
+
     def test_build_without_any_account(self):
         self.write(".config/claude-usage.conf", "keychain = off\n")
         clock = FakeClock()
         services = build(self.host(LINUX), clock=clock, http=FakeHttp(clock))
-        self.assertEqual(services.app.menu().title, "Claude ?")
+        self.assertEqual(services.app.menu().title, "AI ?")
 
     def test_updater_targets_the_plugin_file(self):
         self.write(".config/claude-usage.conf", "keychain = off\n")

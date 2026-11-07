@@ -5,9 +5,11 @@ import sys
 from typing import List, Optional
 
 from .i18n import LANGUAGES, Translator, normalize_language
-from .platform_setup import LINUX, WINDOWS, Host, build
+from .infra import CliLocator
+from .notify import Notifier, macos_notifier, notify_send_notifier
+from .platform_setup import LINUX, MACOS, WINDOWS, Host, build
 from .sources import COMPACT_KEY, set_account_hidden, set_conf_value
-from .tray import TrayBackend, TrayController, relaunch
+from .tray import TrayBackend, TrayController, TrayNotifier, relaunch
 from .view import COMPACT, HIDE_ACCOUNT, LANGUAGE, SHOW_ACCOUNT, Action
 from .xbar import ARGOS, SETTING_FLAGS, SWIFTBAR, XbarRenderer
 
@@ -62,9 +64,11 @@ def run_tray(host: Host) -> None:
     # Services are rebuilt on every refresh so edits to the conf file (language, tokens)
     # apply without restarting the tray.
     services = build(host)
+    backend = tray_backend(host.os_name, services.tr)
+    notifier = TrayNotifier(backend)
     TrayController(
-        backend=tray_backend(host.os_name, services.tr),
-        build_menu=lambda force: build(host).app.menu(force=force),
+        backend=backend,
+        build_menu=lambda force: build(host, notifier=notifier).app.menu(force=force),
         refresh=lambda: build(host).app.refresh(),
         update=services.updater.update,
         check_update=lambda: build(host).app.newer_release(fresh=True),
@@ -74,11 +78,19 @@ def run_tray(host: Host) -> None:
     ).run()
 
 
+def xbar_notifier(host: Host) -> Notifier:
+    """SwiftBar (or osascript) on macOS, notify-send under Argos."""
+    if host.os_name == MACOS:
+        return macos_notifier(host.env)
+    return notify_send_notifier(CliLocator(host.home, host.env, host.os_name == WINDOWS))
+
+
 def print_menu(host: Host) -> None:
     flavor = ARGOS if "ARGOS_MENU_OPEN" in host.env else SWIFTBAR
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")  # the menu text is not ASCII
-    sys.stdout.write(XbarRenderer(host.self_path, flavor).render(build(host).app.menu()))
+    menu = build(host, notifier=xbar_notifier(host)).app.menu()
+    sys.stdout.write(XbarRenderer(host.self_path, flavor).render(menu))
 
 
 def main(argv: Optional[List[str]] = None) -> int:
