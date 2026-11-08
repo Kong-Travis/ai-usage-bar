@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Mapping
 
-VERSION = "1.4.0"
+VERSION = "1.4.1"
 REPO = "Kong-Travis/ai-usage-bar"
 PLUGIN_PATH_IN_REPO = "plugin/claude-usage.1m.py"
 REPO_URL = "https://github.com/" + REPO
