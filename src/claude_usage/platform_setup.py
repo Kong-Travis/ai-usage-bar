@@ -128,7 +128,7 @@ def build(host: Host, clock: Clock = None, http: HttpClient = None,
     sources, readers = build_providers(host, config, clock, tr, http, endpoints)
     presenter = Presenter(clock, tr, VERSION, REPO_URL, config.warn, config.crit, MAX_IN_TITLE,
                           SHOW_SUPPORT, hidden=config.hidden, compact=config.compact)
-    # Alerts use the same crit as the red colour, so a notification matches what the bar shows.
+    # Alerts use the same crit as the orange (critical) color, so a notification matches what the bar shows.
     alerts = LimitAlerts(notifier if notifier and config.notify else NullNotifier(), cache, tr,
                          config.crit, presenter.time_left, presenter.window_name, clock)
     app = UsageApp(

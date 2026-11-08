@@ -4,8 +4,8 @@ import srcpath  # noqa: F401  (must come first)
 import unittest
 
 from claude_usage.domain import AGY, CLAUDE, CODEX
-from claude_usage.view import (LANGUAGE, OPEN, QUIT, REFRESH, SEPARATOR, UPDATE, WARNING_ICON, Action,
-                               Menu, MenuItem)
+from claude_usage.view import (CRIT_COLOR, LANGUAGE, OPEN, QUIT, REFRESH, SEPARATOR, UPDATE, WARN_COLOR,
+                               WARNING_ICON, Action, Menu, MenuItem)
 from claude_usage.xbar import ARGOS, SWIFTBAR, XbarRenderer
 
 SELF = "/opt/claude usage/plugin.py"
@@ -20,6 +20,8 @@ class Title(unittest.TestCase):
         r = XbarRenderer(SELF, SWIFTBAR)
         self.assertEqual(r.title(menu()), "C 1/2/3 |")
         self.assertEqual(r.title(menu(color="orange")), "C 1/2/3 | color=orange")
+        # Level colors get a darker shade for a light menu bar: SwiftBar's "light,dark" pair.
+        self.assertEqual(r.title(menu(color=WARN_COLOR)), "C 1/2/3 | color=#b8860b,#ffd60a")
         self.assertEqual(r.title(menu(color="red", update=True)),
                          "C 1/2/3 | color=red sfimage=arrow.down.circle")
         self.assertNotIn("dropdown", r.title(menu()))
@@ -29,6 +31,8 @@ class Title(unittest.TestCase):
         self.assertEqual(r.title(menu()), "C 1/2/3 | dropdown=false")
         self.assertEqual(r.title(menu(color="red", update=True)),
                          "C 1/2/3 | color=red iconName=software-update-available-symbolic dropdown=false")
+        # No pair syntax on Argos: the dark-panel shade alone.
+        self.assertEqual(r.title(menu(color=CRIT_COLOR)), "C 1/2/3 | color=#ff9f0a dropdown=false")
         self.assertNotIn("sfimage", r.title(menu(update=True)))
 
     def test_default_flavor_is_swiftbar(self):

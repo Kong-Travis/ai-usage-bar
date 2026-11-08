@@ -1,4 +1,4 @@
-C 50/20 | sfimage=arrow.down.circle
+C 50/20 | color=#248a3d,#30d158 sfimage=arrow.down.circle
 ---
 Có bản mới v9.9.9 (đang dùng v<VERSION>) | color=#2e7d32
 Cập nhật ngay | bash="<SELF>" param1=--update terminal=false refresh=true
@@ -6,8 +6,8 @@ Xem thay đổi | href=https://github.com/Kong-Travis/ai-usage-bar/releases/tag/
 ---
 Claude Code | color=gray size=12 sfimage=sparkle sfcolor=gray
 C: claude-ci - token | size=13
-5 giờ: 50%  (reset sau 1 giờ)
-Tuần: 20%  (reset sau 1 ngày)
+5 giờ: 50%  (reset sau 1 giờ) | color=#248a3d,#30d158
+Tuần: 20%  (reset sau 1 ngày) | color=#248a3d,#30d158
 Hiện trên thanh menu | checked=true bash="<SELF>" param1=--hide param2=claude-ci terminal=false refresh=true
 ---
 Cập nhật mỗi 3 phút | color=gray size=11

@@ -1,22 +1,22 @@
- | sfimage=speedometer sfcolor=red tooltip="W 93/72/50"
+ | sfimage=speedometer sfcolor=#c93400,#ff9f0a tooltip="W 93/72/50"
 ---
 Mở rộng (hiện số liệu) | bash="<SELF>" param1=--compact param2=off terminal=false refresh=true
 ---
 Claude Code | color=gray size=12 sfimage=sparkle sfcolor=gray
 T: claude-token - token | size=13
-5 giờ: 0%  (reset sau 2 giờ 15 phút)
-Tuần: 65%  (reset sau 2 ngày 21 giờ)
-Theo đà này sẽ hết sau ~2 ngày 5 giờ, trước khi reset | color=orange size=11 sfimage=exclamationmark.triangle sfcolor=orange
-Fable (tuần): 1%  (reset sau 2 ngày 21 giờ)
+5 giờ: 0%  (reset sau 2 giờ 15 phút) | color=#248a3d,#30d158
+Tuần: 65%  (reset sau 2 ngày 21 giờ) | color=#248a3d,#30d158
+Theo đà này sẽ hết sau ~2 ngày 5 giờ, trước khi reset | color=#b8860b,#ffd60a size=11 sfimage=exclamationmark.triangle sfcolor=#b8860b,#ffd60a
+Fable (tuần): 1%  (reset sau 2 ngày 21 giờ) | color=#248a3d,#30d158
 Hiện trên thanh menu | bash="<SELF>" param1=--show param2=claude-token terminal=false refresh=true
 ---
 W: work - token | size=13
-5 giờ: 93%  (reset sau 45 phút) | color=red
-Theo đà này sẽ hết sau ~20 phút, trước khi reset | color=red size=11 sfimage=exclamationmark.triangle sfcolor=red
-Tuần: 72%  (reset sau 6 ngày) | color=orange
-Theo đà này sẽ hết sau ~9 giờ 20 phút, trước khi reset | color=orange size=11 sfimage=exclamationmark.triangle sfcolor=orange
-Fable (tuần): 50%  (reset sau 6 ngày)
-Theo đà này sẽ hết sau ~1 ngày, trước khi reset | color=orange size=11 sfimage=exclamationmark.triangle sfcolor=orange
+5 giờ: 93%  (reset sau 45 phút) | color=#c93400,#ff9f0a
+Theo đà này sẽ hết sau ~20 phút, trước khi reset | color=#c93400,#ff9f0a size=11 sfimage=exclamationmark.triangle sfcolor=#c93400,#ff9f0a
+Tuần: 72%  (reset sau 6 ngày) | color=#b8860b,#ffd60a
+Theo đà này sẽ hết sau ~9 giờ 20 phút, trước khi reset | color=#b8860b,#ffd60a size=11 sfimage=exclamationmark.triangle sfcolor=#b8860b,#ffd60a
+Fable (tuần): 50%  (reset sau 6 ngày) | color=#248a3d,#30d158
+Theo đà này sẽ hết sau ~1 ngày, trước khi reset | color=#b8860b,#ffd60a size=11 sfimage=exclamationmark.triangle sfcolor=#b8860b,#ffd60a
 Hiện trên thanh menu | checked=true bash="<SELF>" param1=--hide param2=work terminal=false refresh=true
 ---
 Cập nhật mỗi 3 phút | color=gray size=11

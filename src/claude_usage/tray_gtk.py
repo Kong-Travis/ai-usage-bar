@@ -17,7 +17,7 @@ from .i18n import EN, VI, Translator
 from .infra import CliLocator
 from .notify import Notifier, notify_send_notifier
 from .tray import TrayBackend
-from .view import ORANGE, RED, Action, Menu, MenuItem
+from .view import CRIT_COLOR, WARN_COLOR, Action, Menu, MenuItem
 
 GTK_LOCK_WAIT_SECONDS = 10.0
 GTK_APP_ID = "claude-usage"
@@ -60,9 +60,9 @@ GTK_ICON_NAMES = {
 
 def gtk_severity(menu: Menu) -> str:
     """"critical" | "warning" | "update" | "normal": what the icon should signal."""
-    if menu.title_color == RED:
+    if menu.title_color == CRIT_COLOR:
         return "critical"
-    if menu.title_color == ORANGE:
+    if menu.title_color == WARN_COLOR:
         return "warning"
     if menu.update_available:
         return "update"

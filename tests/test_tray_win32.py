@@ -15,8 +15,8 @@ from claude_usage.i18n import Translator  # noqa: E402
 from claude_usage.tray import TrayBackend, TrayController  # noqa: E402
 from claude_usage.domain import AccountRow, Usage  # noqa: E402
 from fakes import claude_usage  # noqa: E402
-from claude_usage.view import (COMPACT, OPEN, QUIT, REFRESH, Action, Menu, MenuItem, ORANGE,  # noqa: E402
-                               RED, SEPARATOR, Presenter)
+from claude_usage.view import (COMPACT, CRIT_COLOR, OK_COLOR, OPEN, QUIT, REFRESH, WARN_COLOR,  # noqa: E402
+                               Action, Menu, MenuItem, SEPARATOR, Presenter)
 
 
 class FakeClock:
@@ -26,7 +26,7 @@ class FakeClock:
 ON_WINDOWS = sys.platform == "win32"
 
 
-def sample_menu(worst=87.4, color=ORANGE, title="C 87/8/1  T 0/65/1") -> Menu:
+def sample_menu(worst=87.4, color=WARN_COLOR, title="C 87/8/1  T 0/65/1") -> Menu:
     return Menu(title, color, False, worst, (
         MenuItem("C: claude - a@b.c", size=13),
         MenuItem("5 giờ: 87%", color=color),
@@ -69,12 +69,14 @@ class PureHelpers(unittest.TestCase):
         self.assertEqual(tw.win32_icon_text(87.6), "88")
         self.assertEqual(tw.win32_icon_text(100.0), "100")
 
-    def test_icon_colors_follow_the_title_color(self):
-        self.assertEqual(tw.win32_icon_colors(RED)[0], tw.WIN32_ALERT_RGB[RED])
-        self.assertEqual(tw.win32_icon_colors(ORANGE)[0], tw.WIN32_ALERT_RGB[ORANGE])
-        self.assertEqual(tw.win32_icon_colors(None)[0], tw.WIN32_NEUTRAL_RGB)
+    def test_icon_colors_follow_the_level(self):
+        green, yellow, orange = (tw.win32_icon_colors(c) for c in (OK_COLOR, WARN_COLOR, CRIT_COLOR))
+        self.assertEqual(len({green[0], yellow[0], orange[0], tw.WIN32_NEUTRAL_RGB}), 4)
+        self.assertEqual(tw.win32_icon_colors(None)[0], tw.WIN32_NEUTRAL_RGB)  # nothing known
         self.assertEqual(tw.win32_icon_colors("gray")[0], tw.WIN32_NEUTRAL_RGB)
-        self.assertEqual(tw.win32_icon_colors(RED)[1], (255, 255, 255))
+        # White digits on green and orange; dark ones on yellow, where white is unreadable.
+        self.assertEqual((green[1], orange[1]), (tw.WIN32_TEXT_RGB, tw.WIN32_TEXT_RGB))
+        self.assertEqual(yellow[1], tw.WIN32_DARK_TEXT_RGB)
 
     def test_font_shrinks_for_three_digits_and_stays_inside_the_icon(self):
         for size in (16, 20, 24, 32):
@@ -263,10 +265,10 @@ class BackendBehaviour(unittest.TestCase):
         api = FakeApi()
         backend, _ = make_backend(api)
         api.script = [lambda: backend.show(sample_menu(worst=12.4, color=None)),
-                      lambda: backend.show(sample_menu(worst=95, color=RED, title="T 95/1/1"))]
+                      lambda: backend.show(sample_menu(worst=95, color=CRIT_COLOR, title="T 95/1/1"))]
         backend.run(lambda: None)
         self.assertEqual(api.named("create_icon"), [
-            ("create_icon", "12", tw.WIN32_NEUTRAL_RGB), ("create_icon", "95", tw.WIN32_ALERT_RGB[RED])])
+            ("create_icon", "12", tw.WIN32_NEUTRAL_RGB), ("create_icon", "95", tw.WIN32_LEVEL_RGB[CRIT_COLOR][0])])
         notes = api.named("notify")
         self.assertEqual(notes[0], ("notify", self.W.NIM_ADD, 1, "C 87/8/1  T 0/65/1"))
         self.assertEqual(notes[1], ("notify", self.W.NIM_MODIFY, 2, "T 95/1/1"))
@@ -469,7 +471,7 @@ class RealWin32(unittest.TestCase):
     def test_icons_can_be_drawn_and_destroyed(self):
         api = tw._Win32Api()
         for text in ("?", "7", "88", "100"):
-            hicon = api.create_icon(text, tw.WIN32_ALERT_RGB[RED], tw.WIN32_TEXT_RGB)
+            hicon = api.create_icon(text, *tw.WIN32_LEVEL_RGB[WARN_COLOR])
             self.assertTrue(hicon)
             api.destroy_icon(hicon)
 

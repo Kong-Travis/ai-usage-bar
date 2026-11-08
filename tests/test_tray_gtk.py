@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.join(ROOT, "src"))
 
 from claude_usage import tray_gtk  # noqa: E402
 from claude_usage.i18n import Translator  # noqa: E402
-from claude_usage.view import ORANGE, RED, Action, Menu, MenuItem, SEPARATOR  # noqa: E402
+from claude_usage.view import CRIT_COLOR, OK_COLOR, WARN_COLOR, Action, Menu, MenuItem, SEPARATOR  # noqa: E402
 
 
 def gi_available() -> bool:
@@ -82,10 +82,11 @@ class InstallCommand(unittest.TestCase):
 
 class IconChoice(unittest.TestCase):
     def test_severity_from_menu(self):
-        self.assertEqual(tray_gtk.gtk_severity(menu(RED)), "critical")
-        self.assertEqual(tray_gtk.gtk_severity(menu(ORANGE)), "warning")
-        self.assertEqual(tray_gtk.gtk_severity(menu(None, update=True)), "update")
-        self.assertEqual(tray_gtk.gtk_severity(menu(RED, update=True)), "critical")
+        self.assertEqual(tray_gtk.gtk_severity(menu(CRIT_COLOR)), "critical")
+        self.assertEqual(tray_gtk.gtk_severity(menu(WARN_COLOR)), "warning")
+        self.assertEqual(tray_gtk.gtk_severity(menu(OK_COLOR)), "normal")
+        self.assertEqual(tray_gtk.gtk_severity(menu(OK_COLOR, update=True)), "update")
+        self.assertEqual(tray_gtk.gtk_severity(menu(CRIT_COLOR, update=True)), "critical")
         self.assertEqual(tray_gtk.gtk_severity(menu()), "normal")
 
     def test_first_icon_the_theme_has(self):

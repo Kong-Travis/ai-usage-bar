@@ -15,7 +15,7 @@ from typing import Callable, Deque, Dict, List, Optional, Sequence, Tuple
 
 from .i18n import EN, VI, Translator
 from .tray import TrayBackend
-from .view import COMPACT, ORANGE, RED, Action, Menu, MenuItem
+from .view import COMPACT, CRIT_COLOR, OK_COLOR, WARN_COLOR, Action, Menu, MenuItem
 
 
 class _W32:
@@ -46,8 +46,14 @@ WIN32_TIP_MAX = 127                    # szTip holds 128 UTF-16 units including 
 WIN32_INFO_TITLE_MAX = 63              # szInfoTitle: 64 units with the NUL
 WIN32_INFO_MAX = 255                   # szInfo: 256 units with the NUL
 WIN32_TEXT_RGB: Win32Rgb = (0xFF, 0xFF, 0xFF)
+WIN32_DARK_TEXT_RGB: Win32Rgb = (0x21, 0x21, 0x21)
 WIN32_NEUTRAL_RGB: Win32Rgb = (0x45, 0x5A, 0x64)
-WIN32_ALERT_RGB = {RED: (0xC6, 0x28, 0x28), ORANGE: (0xE6, 0x5C, 0x00)}
+# (background, text) of the icon per level color; yellow needs dark text to stay readable.
+WIN32_LEVEL_RGB: Dict[str, Tuple[Win32Rgb, Win32Rgb]] = {
+    OK_COLOR: ((0x2E, 0x7D, 0x32), WIN32_TEXT_RGB),
+    WARN_COLOR: ((0xF9, 0xA8, 0x25), WIN32_DARK_TEXT_RGB),
+    CRIT_COLOR: ((0xE6, 0x5C, 0x00), WIN32_TEXT_RGB),
+}
 
 # Strings of this frontend only; menu text arrives already translated in the Menu.
 WIN32_TEXT = {
@@ -84,8 +90,8 @@ def win32_icon_text(worst: Optional[float]) -> str:
 
 
 def win32_icon_colors(title_color: Optional[str]) -> Tuple[Win32Rgb, Win32Rgb]:
-    """(background, text) colors: red or orange when a limit is close, neutral otherwise."""
-    return WIN32_ALERT_RGB.get(title_color, WIN32_NEUTRAL_RGB), WIN32_TEXT_RGB
+    """(background, text) colors: the level of the worst limit, neutral when nothing is known."""
+    return WIN32_LEVEL_RGB.get(title_color or "", (WIN32_NEUTRAL_RGB, WIN32_TEXT_RGB))
 
 
 def win32_font_height(size: int, text: str) -> int:
@@ -582,7 +588,7 @@ class _Win32Api:
         return bool(self.fn.Shell_NotifyIconW(_W32.NIM_MODIFY, self._ct.byref(data)))
 
     def create_icon(self, text: str, background: Win32Rgb, foreground: Win32Rgb):
-        """An HICON with `text` in white on a rounded square, sized for the tray."""
+        """An HICON with `text` on a rounded square, sized for the tray."""
         ct, f = self._ct, self.fn
         size = f.GetSystemMetrics(_W32.SM_CXSMICON) or 16
         mask = win32_icon_mask(size)

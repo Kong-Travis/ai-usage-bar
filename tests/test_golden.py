@@ -146,13 +146,13 @@ class BarChoices(unittest.TestCase):
             plans, tag = scenario_two_accounts(home)
             with FakeServer(plans, latest_tag=tag) as server:
                 before = run_plugin(home, server)
-                self.assertTrue(before.startswith("T 0/65/1  W 93/72/50 | color=red"))
+                self.assertTrue(before.startswith("T 0/65/1  W 93/72/50 | color=#c93400,#ff9f0a"))
                 self.assertIn('Hiện trên thanh menu | checked=true bash="<SELF>" param1=--hide '
                               'param2=work ', before)
 
                 self.assertEqual(run_plugin(home, server, "--hide", "work"), "")
                 hidden = run_plugin(home, server)
-                self.assertTrue(hidden.startswith("T 0/65/1 |\n"), hidden[:40])
+                self.assertTrue(hidden.startswith("T 0/65/1 | color=#248a3d,#30d158\n"), hidden[:40])
                 self.assertIn("W: work", hidden)  # still in the menu, to show it again
                 self.assertIn('Hiện trên thanh menu | bash="<SELF>" param1=--show param2=work ',
                               hidden)
@@ -161,7 +161,7 @@ class BarChoices(unittest.TestCase):
                 run_plugin(home, server, "--compact", "on")
                 compact = run_plugin(home, server)
                 self.assertTrue(compact.startswith(
-                    ' | sfimage=speedometer tooltip="T 0/65/1"\n---\n'
+                    ' | sfimage=speedometer sfcolor=#248a3d,#30d158 tooltip="T 0/65/1"\n---\n'
                     'Mở rộng (hiện số liệu) | bash="<SELF>" param1=--compact param2=off '),
                     compact[:160])
 
@@ -256,11 +256,11 @@ class NoFiveHourLimit(unittest.TestCase):
             with FakeServer(plans) as server:
                 out = run_plugin(home, server, extra_env={"CLAUDE_USAGE_LANG": "en"})
         lines = out.splitlines()
-        self.assertEqual(lines[0], "U 58/53 |")  # no 5-hour number, not a 0
+        self.assertEqual(lines[0], "U 58/53 | color=#248a3d,#30d158")  # no 5-hour number, not a 0
         self.assertNotIn("Error", out)
         self.assertIn("5-hour: no limit", lines)
-        self.assertIn("Weekly: 58%  (resets in 1d)", lines)
-        self.assertIn("Fable (weekly): 53%  (resets in 1d)", lines)
+        self.assertIn("Weekly: 58%  (resets in 1d) | color=#248a3d,#30d158", lines)
+        self.assertIn("Fable (weekly): 53%  (resets in 1d) | color=#248a3d,#30d158", lines)
 
 
 if __name__ == "__main__":

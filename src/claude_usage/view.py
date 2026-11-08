@@ -16,7 +16,10 @@ CHECK_UPDATE = "check_update"  # ask GitHub for the latest release now, then red
 # label), and the icon-only bar (value: "on" or "off").
 SHOW_ACCOUNT, HIDE_ACCOUNT, COMPACT = "show_account", "hide_account", "compact"
 SETTINGS = (LANGUAGE, SHOW_ACCOUNT, HIDE_ACCOUNT, COMPACT)
-GRAY, GREEN, ORANGE, RED = "gray", "#2e7d32", "orange", "red"
+GRAY, GREEN = "gray", "#2e7d32"
+# Limit levels: below warn, from warn, from crit. Tuned for a dark background (the GNOME top
+# bar, a dark menu); frontends that know the appearance map each one to their own shade.
+OK_COLOR, WARN_COLOR, CRIT_COLOR = "#30d158", "#ffd60a", "#ff9f0a"
 
 
 @dataclass(frozen=True)
@@ -45,7 +48,7 @@ SEPARATOR = MenuItem(separator=True)
 @dataclass(frozen=True)
 class Menu:
     title: str                    # e.g. "C 13/8/1  T 0/65/1"
-    title_color: Optional[str]    # ORANGE / RED when a limit is close
+    title_color: Optional[str]    # the level color of the worst limit, None when nothing is known
     update_available: bool
     worst: Optional[float]        # highest known percentage, None when nothing is known
     items: Tuple[MenuItem, ...]
@@ -119,8 +122,11 @@ class Presenter:
         self._crit = crit
         self._max_in_title = max_in_title
 
-    def color(self, pct: float) -> Optional[str]:
-        return RED if pct >= self._crit else ORANGE if pct >= self._warn else None
+    def color(self, pct: Optional[float]) -> Optional[str]:
+        """The level color of a percentage; None when it is unknown (no data is not 0%)."""
+        if pct is None:
+            return None
+        return CRIT_COLOR if pct >= self._crit else WARN_COLOR if pct >= self._warn else OK_COLOR
 
     def duration(self, seconds: float) -> str:
         """A span of time, e.g. "2 giờ 15 phút" / "2h 15m", minutes rounded up."""
@@ -223,7 +229,7 @@ class Presenter:
             items.append(MenuItem(tr("check_update_done" if up_to_date else "check_update"),
                                   action=Action(CHECK_UPDATE)))
         items.append(MenuItem(tr("refresh_now"), action=Action(REFRESH)))
-        return Menu(title, self.color(worst or 0), bool(new_tag), worst, tuple(items), compact)
+        return Menu(title, self.color(worst), bool(new_tag), worst, tuple(items), compact)
 
     def window_name(self, w: Window) -> str:
         """"5 giờ", "Tuần", "Fable (tuần)", "Gemini (5 giờ)"; another cadence keeps the
@@ -244,10 +250,12 @@ class Presenter:
         if pace is None:
             return None
         if pace.exhausted:
-            text, color = self._tr("pace_exhausted", left=self.time_left(w.reset)), RED
+            text, color = self._tr("pace_exhausted", left=self.time_left(w.reset)), CRIT_COLOR
         elif pace.run_out_at is not None:
             left = self.duration(pace.run_out_at - self._clock.now())
-            text, color = self._tr("pace_runs_out", left=left), self.color(w.pct or 0) or ORANGE
+            # A warning is never green: at least the warn color, even below warn.
+            color = CRIT_COLOR if (w.pct or 0) >= self._crit else WARN_COLOR
+            text = self._tr("pace_runs_out", left=left)
         else:
             return None
         return MenuItem(text, color=color, size=11, icon=WARNING_ICON)

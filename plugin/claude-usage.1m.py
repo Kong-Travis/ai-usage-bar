@@ -847,8 +847,8 @@ class UserConfig:
         language = en                   English menus (default: vi, Vietnamese)
         hide = c-m, c-nsc               accounts (by label) left out of the bar title
         compact = on                    show only an icon in the bar
-        warn = 70                       percent at which a limit turns orange
-        crit = 90                       percent at which it turns red and notifies
+        warn = 70                       percent at which a limit turns yellow (green below)
+        crit = 90                       percent at which it turns orange and notifies
         notify = off                    no notifications
     """
     token_files: Tuple[Tuple[str, str], ...] = ()
@@ -1576,7 +1576,10 @@ CHECK_UPDATE = "check_update"  # ask GitHub for the latest release now, then red
 # label), and the icon-only bar (value: "on" or "off").
 SHOW_ACCOUNT, HIDE_ACCOUNT, COMPACT = "show_account", "hide_account", "compact"
 SETTINGS = (LANGUAGE, SHOW_ACCOUNT, HIDE_ACCOUNT, COMPACT)
-GRAY, GREEN, ORANGE, RED = "gray", "#2e7d32", "orange", "red"
+GRAY, GREEN = "gray", "#2e7d32"
+# Limit levels: below warn, from warn, from crit. Tuned for a dark background (the GNOME top
+# bar, a dark menu); frontends that know the appearance map each one to their own shade.
+OK_COLOR, WARN_COLOR, CRIT_COLOR = "#30d158", "#ffd60a", "#ff9f0a"
 
 
 @dataclass(frozen=True)
@@ -1605,7 +1608,7 @@ SEPARATOR = MenuItem(separator=True)
 @dataclass(frozen=True)
 class Menu:
     title: str                    # e.g. "C 13/8/1  T 0/65/1"
-    title_color: Optional[str]    # ORANGE / RED when a limit is close
+    title_color: Optional[str]    # the level color of the worst limit, None when nothing is known
     update_available: bool
     worst: Optional[float]        # highest known percentage, None when nothing is known
     items: Tuple[MenuItem, ...]
@@ -1679,8 +1682,11 @@ class Presenter:
         self._crit = crit
         self._max_in_title = max_in_title
 
-    def color(self, pct: float) -> Optional[str]:
-        return RED if pct >= self._crit else ORANGE if pct >= self._warn else None
+    def color(self, pct: Optional[float]) -> Optional[str]:
+        """The level color of a percentage; None when it is unknown (no data is not 0%)."""
+        if pct is None:
+            return None
+        return CRIT_COLOR if pct >= self._crit else WARN_COLOR if pct >= self._warn else OK_COLOR
 
     def duration(self, seconds: float) -> str:
         """A span of time, e.g. "2 giờ 15 phút" / "2h 15m", minutes rounded up."""
@@ -1783,7 +1789,7 @@ class Presenter:
             items.append(MenuItem(tr("check_update_done" if up_to_date else "check_update"),
                                   action=Action(CHECK_UPDATE)))
         items.append(MenuItem(tr("refresh_now"), action=Action(REFRESH)))
-        return Menu(title, self.color(worst or 0), bool(new_tag), worst, tuple(items), compact)
+        return Menu(title, self.color(worst), bool(new_tag), worst, tuple(items), compact)
 
     def window_name(self, w: Window) -> str:
         """"5 giờ", "Tuần", "Fable (tuần)", "Gemini (5 giờ)"; another cadence keeps the
@@ -1804,10 +1810,12 @@ class Presenter:
         if pace is None:
             return None
         if pace.exhausted:
-            text, color = self._tr("pace_exhausted", left=self.time_left(w.reset)), RED
+            text, color = self._tr("pace_exhausted", left=self.time_left(w.reset)), CRIT_COLOR
         elif pace.run_out_at is not None:
             left = self.duration(pace.run_out_at - self._clock.now())
-            text, color = self._tr("pace_runs_out", left=left), self.color(w.pct or 0) or ORANGE
+            # A warning is never green: at least the warn color, even below warn.
+            color = CRIT_COLOR if (w.pct or 0) >= self._crit else WARN_COLOR
+            text = self._tr("pace_runs_out", left=left)
         else:
             return None
         return MenuItem(text, color=color, size=11, icon=WARNING_ICON)
@@ -2474,7 +2482,7 @@ def build(host: Host, clock: Clock = None, http: HttpClient = None,
     sources, readers = build_providers(host, config, clock, tr, http, endpoints)
     presenter = Presenter(clock, tr, VERSION, REPO_URL, config.warn, config.crit, MAX_IN_TITLE,
                           SHOW_SUPPORT, hidden=config.hidden, compact=config.compact)
-    # Alerts use the same crit as the red colour, so a notification matches what the bar shows.
+    # Alerts use the same crit as the orange (critical) color, so a notification matches what the bar shows.
     alerts = LimitAlerts(notifier if notifier and config.notify else NullNotifier(), cache, tr,
                          config.crit, presenter.time_left, presenter.window_name, clock)
     app = UsageApp(
@@ -2725,6 +2733,12 @@ ITEM_SFIMAGE = {CLAUDE: "sparkle", CODEX: "terminal", AGY: "atom",
 ITEM_ARGOS_ICON = {CLAUDE: "starred-symbolic", CODEX: "utilities-terminal-symbolic",
                    AGY: "applications-science-symbolic", WARNING_ICON: "dialog-warning-symbolic"}
 
+# Level colors as SwiftBar "light,dark" pairs (no space: params split on spaces). The view's
+# colors suit a dark background; a light menu bar or menu needs darker shades to stay readable.
+# Argos has no pair syntax and the GNOME top bar is dark, so it keeps the view's color.
+SWIFTBAR_COLORS = {OK_COLOR: "#248a3d," + OK_COLOR, WARN_COLOR: "#b8860b," + WARN_COLOR,
+                   CRIT_COLOR: "#c93400," + CRIT_COLOR}
+
 
 def xbar_quote(value: str) -> str:
     """A parameter value SwiftBar and Argos read as one word, spaces included."""
@@ -2756,7 +2770,7 @@ class XbarRenderer:
             return self.compact_title(menu)
         line = menu.title + " |"
         if menu.title_color:
-            line += " color=" + menu.title_color
+            line += " color=" + self.color(menu.title_color)
         if self._flavor == ARGOS:
             if menu.update_available:
                 line += " iconName=" + UPDATE_ARGOS_ICON
@@ -2766,20 +2780,21 @@ class XbarRenderer:
         return line
 
     def compact_title(self, menu: Menu) -> str:
-        """An icon and no text, tinted orange / red when a limit is close. Without a tint
-        SwiftBar draws it as a template image, like the other menu bar icons."""
+        """An icon and no text, tinted with the level color of the worst limit. Without a
+        tint (nothing known) SwiftBar draws it as a template image, like the other menu bar
+        icons."""
         if self._flavor == ARGOS:
             icon = UPDATE_ARGOS_ICON if menu.update_available else COMPACT_ARGOS_ICON
             return " | iconName=%s dropdown=false" % icon
         line = " | sfimage=" + (UPDATE_SFIMAGE if menu.update_available else COMPACT_SFIMAGE)
         if menu.title_color:
-            line += " sfcolor=" + menu.title_color
+            line += " sfcolor=" + self.color(menu.title_color)
         return line + " tooltip=" + xbar_quote(menu.title.replace("|", "/"))
 
     def item(self, item: MenuItem) -> str:
         params: List[str] = []
         if item.color:
-            params.append("color=" + item.color)
+            params.append("color=" + self.color(item.color))
         if item.size:
             params.append("size=%d" % item.size)
         if item.checked:  # Argos has no checkmark; a check icon stands in for it
@@ -2807,7 +2822,11 @@ class XbarRenderer:
         name = ITEM_SFIMAGE.get(item.icon or "")
         if not name:
             return []
-        return ["sfimage=" + name] + (["sfcolor=" + item.color] if item.color else [])
+        return ["sfimage=" + name] + (["sfcolor=" + self.color(item.color)] if item.color else [])
+
+    def color(self, color: str) -> str:
+        """A view color as this flavor writes it."""
+        return SWIFTBAR_COLORS.get(color, color) if self._flavor == SWIFTBAR else color
 
 
 # ---------- claude_usage/cli.py ----------
@@ -2979,9 +2998,9 @@ GTK_ICON_NAMES = {
 
 def gtk_severity(menu: Menu) -> str:
     """"critical" | "warning" | "update" | "normal": what the icon should signal."""
-    if menu.title_color == RED:
+    if menu.title_color == CRIT_COLOR:
         return "critical"
-    if menu.title_color == ORANGE:
+    if menu.title_color == WARN_COLOR:
         return "warning"
     if menu.update_available:
         return "update"
@@ -3245,8 +3264,14 @@ WIN32_TIP_MAX = 127                    # szTip holds 128 UTF-16 units including 
 WIN32_INFO_TITLE_MAX = 63              # szInfoTitle: 64 units with the NUL
 WIN32_INFO_MAX = 255                   # szInfo: 256 units with the NUL
 WIN32_TEXT_RGB: Win32Rgb = (0xFF, 0xFF, 0xFF)
+WIN32_DARK_TEXT_RGB: Win32Rgb = (0x21, 0x21, 0x21)
 WIN32_NEUTRAL_RGB: Win32Rgb = (0x45, 0x5A, 0x64)
-WIN32_ALERT_RGB = {RED: (0xC6, 0x28, 0x28), ORANGE: (0xE6, 0x5C, 0x00)}
+# (background, text) of the icon per level color; yellow needs dark text to stay readable.
+WIN32_LEVEL_RGB: Dict[str, Tuple[Win32Rgb, Win32Rgb]] = {
+    OK_COLOR: ((0x2E, 0x7D, 0x32), WIN32_TEXT_RGB),
+    WARN_COLOR: ((0xF9, 0xA8, 0x25), WIN32_DARK_TEXT_RGB),
+    CRIT_COLOR: ((0xE6, 0x5C, 0x00), WIN32_TEXT_RGB),
+}
 
 # Strings of this frontend only; menu text arrives already translated in the Menu.
 WIN32_TEXT = {
@@ -3283,8 +3308,8 @@ def win32_icon_text(worst: Optional[float]) -> str:
 
 
 def win32_icon_colors(title_color: Optional[str]) -> Tuple[Win32Rgb, Win32Rgb]:
-    """(background, text) colors: red or orange when a limit is close, neutral otherwise."""
-    return WIN32_ALERT_RGB.get(title_color, WIN32_NEUTRAL_RGB), WIN32_TEXT_RGB
+    """(background, text) colors: the level of the worst limit, neutral when nothing is known."""
+    return WIN32_LEVEL_RGB.get(title_color or "", (WIN32_NEUTRAL_RGB, WIN32_TEXT_RGB))
 
 
 def win32_font_height(size: int, text: str) -> int:
@@ -3781,7 +3806,7 @@ class _Win32Api:
         return bool(self.fn.Shell_NotifyIconW(_W32.NIM_MODIFY, self._ct.byref(data)))
 
     def create_icon(self, text: str, background: Win32Rgb, foreground: Win32Rgb):
-        """An HICON with `text` in white on a rounded square, sized for the tray."""
+        """An HICON with `text` on a rounded square, sized for the tray."""
         ct, f = self._ct, self.fn
         size = f.GetSystemMetrics(_W32.SM_CXSMICON) or 16
         mask = win32_icon_mask(size)

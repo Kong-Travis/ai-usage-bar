@@ -7,8 +7,8 @@ from claude_usage.domain import (AGY, CLAUDE, CODEX, FIVE_HOUR, FIVE_HOUR_SECOND
                                  WEEKLY, AccountRow, Usage, Window)
 from fakes import claude_usage
 from claude_usage.i18n import Translator
-from claude_usage.view import (GRAY, GREEN, LANGUAGE, OPEN, ORANGE, RED, REFRESH, SEPARATOR, UPDATE,
-                               WARNING_ICON, Presenter, short_name)
+from claude_usage.view import (CRIT_COLOR, GRAY, GREEN, LANGUAGE, OK_COLOR, OPEN, REFRESH, SEPARATOR, UPDATE,
+                               WARN_COLOR, WARNING_ICON, Presenter, short_name)
 
 NOW = 1_000_000
 REPO_URL = "https://example.test/repo"
@@ -73,12 +73,13 @@ class TimeLeft(unittest.TestCase):
 class Colors(unittest.TestCase):
     def test_thresholds(self):
         p = presenter()
-        self.assertIsNone(p.color(0))
-        self.assertIsNone(p.color(69.9))
-        self.assertEqual(p.color(70), ORANGE)
-        self.assertEqual(p.color(89.9), ORANGE)
-        self.assertEqual(p.color(90), RED)
-        self.assertEqual(p.color(100), RED)
+        self.assertIsNone(p.color(None))  # unknown is not 0%: no color, never green
+        self.assertEqual(p.color(0), OK_COLOR)
+        self.assertEqual(p.color(69.9), OK_COLOR)
+        self.assertEqual(p.color(70), WARN_COLOR)
+        self.assertEqual(p.color(89.9), WARN_COLOR)
+        self.assertEqual(p.color(90), CRIT_COLOR)
+        self.assertEqual(p.color(100), CRIT_COLOR)
 
 
 class Title(unittest.TestCase):
@@ -124,10 +125,11 @@ class Title(unittest.TestCase):
         self.assertEqual(presenter().present(rows, None).title, "C 4  Cx 2/3  Ag 1")
 
     def test_title_color_follows_the_worst_value(self):
-        self.assertIsNone(presenter().present([row("C", usage(10, 20))], None).title_color)
-        self.assertEqual(presenter().present([row("C", usage(75, 20))], None).title_color, ORANGE)
+        self.assertIsNone(presenter().present([row("C", None)], None).title_color)
+        self.assertEqual(presenter().present([row("C", usage(10, 20))], None).title_color, OK_COLOR)
+        self.assertEqual(presenter().present([row("C", usage(75, 20))], None).title_color, WARN_COLOR)
         hot = usage(10, 20, [("Fable", 95.0, 0)])
-        self.assertEqual(presenter().present([row("C", hot)], None).title_color, RED)
+        self.assertEqual(presenter().present([row("C", hot)], None).title_color, CRIT_COLOR)
 
     def test_no_accounts(self):
         menu = presenter().present([], None)
@@ -168,21 +170,22 @@ class PaceWarnings(unittest.TestCase):
         # 30% in 2 of 5 hours projects to 75% at the reset: nothing to say.
         w = Window(FIVE_HOUR, 30.0, NOW + 3 * 3600, FIVE_HOUR_SECONDS)
         self.assertEqual(self.lines(w), [])
-        # 60% in 2 hours: the last 40% go in 1h20m, before the reset in 3 hours.
+        # 60% in 2 hours: the last 40% go in 1h20m, before the reset in 3 hours. The line is
+        # still green (below warn), but a warning is never green.
         w = Window(FIVE_HOUR, 60.0, NOW + 3 * 3600, FIVE_HOUR_SECONDS)
         self.assertEqual(self.lines(w), [("Theo đà này sẽ hết sau ~1 giờ 20 phút, trước khi reset",
-                                          ORANGE)])
+                                          WARN_COLOR)])
         self.assertEqual(self.lines(w, "en"), [("At this pace it runs out in ~1h 20m, before the reset",
-                                                ORANGE)])
+                                                WARN_COLOR)])
 
-    def test_red_once_the_limit_itself_is_red(self):
+    def test_critical_once_the_limit_itself_is_critical(self):
         w = Window(FIVE_HOUR, 92.0, NOW + 3600, FIVE_HOUR_SECONDS)
-        self.assertEqual(self.lines(w)[0][1], RED)
+        self.assertEqual(self.lines(w)[0][1], CRIT_COLOR)
 
     def test_exhausted_limit_says_when_it_comes_back(self):
         w = Window(FIVE_HOUR, 100.0, NOW + 2 * 3600, FIVE_HOUR_SECONDS)
-        self.assertEqual(self.lines(w), [("Đã hết hạn mức, dùng lại được sau 2 giờ", RED)])
-        self.assertEqual(self.lines(w, "en"), [("Limit reached, back in 2h", RED)])
+        self.assertEqual(self.lines(w), [("Đã hết hạn mức, dùng lại được sau 2 giờ", CRIT_COLOR)])
+        self.assertEqual(self.lines(w, "en"), [("Limit reached, back in 2h", CRIT_COLOR)])
 
     def test_nothing_when_the_data_cannot_tell(self):
         for w in (Window(FIVE_HOUR, 100.0),  # no reset
@@ -249,9 +252,9 @@ class AccountItems(unittest.TestCase):
     def test_usage_lines_and_colors(self):
         items = presenter().account_items(row("C", usage(72.0, 95.0)))
         self.assertEqual(items[1].text, "5 giờ: 72%  (reset sau 1 giờ)")
-        self.assertEqual(items[1].color, ORANGE)
+        self.assertEqual(items[1].color, WARN_COLOR)
         self.assertEqual(items[2].text, "Tuần: 95%  (reset sau 1 ngày)")
-        self.assertEqual(items[2].color, RED)
+        self.assertEqual(items[2].color, CRIT_COLOR)
         self.assertIs(items[-1], SEPARATOR)
 
     def test_model_window_with_and_without_reset(self):
@@ -296,7 +299,7 @@ class BarChoices(unittest.TestCase):
         menu = self.present(self.rows(), hidden=["claude"])
         # Four accounts would show one number each; three visible ones fit the title.
         self.assertEqual(menu.title, "C2 5/6  C3 7/8  C4 1/2")
-        self.assertIsNone(menu.title_color)
+        self.assertEqual(menu.title_color, OK_COLOR)  # the hidden hot account does not tint it
         self.assertEqual(menu.worst, 8.0)
         self.assertFalse(menu.compact)
         heads = [i.text for i in menu.items if i.size == 13]
