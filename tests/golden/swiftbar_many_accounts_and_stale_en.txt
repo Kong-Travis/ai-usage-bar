@@ -1,24 +1,24 @@
-A 10/20  A2 10/20  A3 10/20  B 10/20 | color=#248a3d,#30d158
+A 10/20  A2 10/20  A3 10/20  B 10/20 |
 ---
 Claude Code | color=gray size=12 sfimage=sparkle sfcolor=gray
 A: claude-a1 - token | size=13
-5-hour: 10%  (resets in 1h 1m) | color=#248a3d,#30d158
-Weekly: 20%  (resets in 1d) | color=#248a3d,#30d158
+5-hour: 10%  (resets in 1h 1m)
+Weekly: 20%  (resets in 1d)
 Show in the menu bar | checked=true bash="<SELF>" param1=--hide param2=claude-a1 terminal=false refresh=true
 ---
 A2: claude-a2 - token | size=13
-5-hour: 10%  (resets in 1h 1m) | color=#248a3d,#30d158
-Weekly: 20%  (resets in 1d) | color=#248a3d,#30d158
+5-hour: 10%  (resets in 1h 1m)
+Weekly: 20%  (resets in 1d)
 Show in the menu bar | checked=true bash="<SELF>" param1=--hide param2=claude-a2 terminal=false refresh=true
 ---
 A3: claude-a3 - token | size=13
-5-hour: 10%  (resets in 1h 1m) | color=#248a3d,#30d158
-Weekly: 20%  (resets in 1d) | color=#248a3d,#30d158
+5-hour: 10%  (resets in 1h 1m)
+Weekly: 20%  (resets in 1d)
 Show in the menu bar | checked=true bash="<SELF>" param1=--hide param2=claude-a3 terminal=false refresh=true
 ---
 B: claude-b1 - token | size=13
-5-hour: 10%  (resets in 3h) | color=#248a3d,#30d158
-Weekly: 20%  (resets in 3d) | color=#248a3d,#30d158
+5-hour: 10%  (resets in 3h)
+Weekly: 20%  (resets in 3d)
 Old numbers, the last refresh failed | color=gray size=11
 Error: RuntimeError: no rate-limit headers | color=gray size=11
 Show in the menu bar | checked=true bash="<SELF>" param1=--hide param2=claude-b1 terminal=false refresh=true

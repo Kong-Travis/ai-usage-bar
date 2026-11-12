@@ -16,23 +16,20 @@ def menu(items=(), title="C 1/2/3", color=None, update=False):
 
 
 class Title(unittest.TestCase):
-    def test_swiftbar_plain_color_and_update_icon(self):
+    def test_swiftbar_title_text_is_never_colored_and_update_icon(self):
         r = XbarRenderer(SELF, SWIFTBAR)
         self.assertEqual(r.title(menu()), "C 1/2/3 |")
-        self.assertEqual(r.title(menu(color="orange")), "C 1/2/3 | color=orange")
-        # Level colors get a darker shade for a light menu bar: SwiftBar's "light,dark" pair.
-        self.assertEqual(r.title(menu(color=WARN_COLOR)), "C 1/2/3 | color=#b8860b,#ffd60a")
-        self.assertEqual(r.title(menu(color="red", update=True)),
-                         "C 1/2/3 | color=red sfimage=arrow.down.circle")
+        # Colored numbers were too glaring: the system text color at every level.
+        self.assertEqual(r.title(menu(color=WARN_COLOR)), "C 1/2/3 |")
+        self.assertEqual(r.title(menu(color=CRIT_COLOR, update=True)),
+                         "C 1/2/3 | sfimage=arrow.down.circle")
         self.assertNotIn("dropdown", r.title(menu()))
 
     def test_argos_uses_icon_name_and_hides_the_dropdown_line(self):
         r = XbarRenderer(SELF, ARGOS)
         self.assertEqual(r.title(menu()), "C 1/2/3 | dropdown=false")
-        self.assertEqual(r.title(menu(color="red", update=True)),
-                         "C 1/2/3 | color=red iconName=software-update-available-symbolic dropdown=false")
-        # No pair syntax on Argos: the dark-panel shade alone.
-        self.assertEqual(r.title(menu(color=CRIT_COLOR)), "C 1/2/3 | color=#ff9f0a dropdown=false")
+        self.assertEqual(r.title(menu(color=CRIT_COLOR, update=True)),
+                         "C 1/2/3 | iconName=software-update-available-symbolic dropdown=false")
         self.assertNotIn("sfimage", r.title(menu(update=True)))
 
     def test_default_flavor_is_swiftbar(self):
@@ -74,21 +71,23 @@ class Items(unittest.TestCase):
 
 
 class Icons(unittest.TestCase):
-    def test_swiftbar_sf_symbols_tinted_like_the_text(self):
+    def test_swiftbar_sf_symbols_tinted_with_the_item_color(self):
         r = XbarRenderer(SELF, SWIFTBAR)
         self.assertEqual(r.item(MenuItem("Claude Code", color="gray", size=12, icon=CLAUDE)),
                          "Claude Code | color=gray size=12 sfimage=sparkle sfcolor=gray")
         self.assertEqual(r.item(MenuItem("Codex", icon=CODEX)), "Codex | sfimage=terminal")
         self.assertEqual(r.item(MenuItem("Antigravity", icon=AGY)), "Antigravity | sfimage=atom")
-        self.assertEqual(r.item(MenuItem("w", color="red", icon=WARNING_ICON)),
-                         "w | color=red sfimage=exclamationmark.triangle sfcolor=red")
+        # A level color tints the icon (light,dark pair) but not the text.
+        self.assertEqual(r.item(MenuItem("w", color=CRIT_COLOR, icon=WARNING_ICON)),
+                         "w | sfimage=exclamationmark.triangle sfcolor=#c93400,#ff9f0a")
+        self.assertEqual(r.item(MenuItem("Weekly: 75%", color=WARN_COLOR)), "Weekly: 75%")
 
     def test_argos_icon_names(self):
         r = XbarRenderer(SELF, ARGOS)
         self.assertEqual(r.item(MenuItem("Codex", icon=CODEX)),
                          "Codex | iconName=utilities-terminal-symbolic")
-        self.assertEqual(r.item(MenuItem("w", color="orange", icon=WARNING_ICON)),
-                         "w | color=orange iconName=dialog-warning-symbolic")
+        self.assertEqual(r.item(MenuItem("w", color=WARN_COLOR, icon=WARNING_ICON)),
+                         "w | iconName=dialog-warning-symbolic")
 
     def test_argos_checkmark_wins_over_the_icon(self):
         line = XbarRenderer(SELF, ARGOS).item(MenuItem("x", checked=True, icon=CLAUDE))

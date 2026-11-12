@@ -29,11 +29,16 @@ ITEM_SFIMAGE = {CLAUDE: "sparkle", CODEX: "terminal", AGY: "atom",
 ITEM_ARGOS_ICON = {CLAUDE: "starred-symbolic", CODEX: "utilities-terminal-symbolic",
                    AGY: "applications-science-symbolic", WARNING_ICON: "dialog-warning-symbolic"}
 
-# Level colors as SwiftBar "light,dark" pairs (no space: params split on spaces). The view's
-# colors suit a dark background; a light menu bar or menu needs darker shades to stay readable.
-# Argos has no pair syntax and the GNOME top bar is dark, so it keeps the view's color.
+# Level colors tint icons only: text keeps the system color in every state, because colored
+# numbers in the bar were too glaring. SwiftBar gets "light,dark" pairs (no space: params split
+# on spaces): the view's colors suit a dark background, a light menu bar needs darker shades.
 SWIFTBAR_COLORS = {OK_COLOR: "#248a3d," + OK_COLOR, WARN_COLOR: "#b8860b," + WARN_COLOR,
                    CRIT_COLOR: "#c93400," + CRIT_COLOR}
+
+
+def is_level_color(color: str) -> bool:
+    """A limit level color: it tints icons but never text."""
+    return color in SWIFTBAR_COLORS
 
 
 def xbar_quote(value: str) -> str:
@@ -65,8 +70,6 @@ class XbarRenderer:
         if menu.compact:
             return self.compact_title(menu)
         line = menu.title + " |"
-        if menu.title_color:
-            line += " color=" + self.color(menu.title_color)
         if self._flavor == ARGOS:
             if menu.update_available:
                 line += " iconName=" + UPDATE_ARGOS_ICON
@@ -89,7 +92,7 @@ class XbarRenderer:
 
     def item(self, item: MenuItem) -> str:
         params: List[str] = []
-        if item.color:
+        if item.color and not is_level_color(item.color):
             params.append("color=" + self.color(item.color))
         if item.size:
             params.append("size=%d" % item.size)
@@ -110,7 +113,7 @@ class XbarRenderer:
         return text + (" | " + " ".join(params) if params else "")
 
     def icon_params(self, item: MenuItem) -> List[str]:
-        """The item's icon, tinted like its text. On Argos a checked item already uses its
+        """The item's icon, tinted with the item's color (a level color included). On Argos a checked item already uses its
         one icon for the checkmark, which wins."""
         if self._flavor == ARGOS:
             name = ITEM_ARGOS_ICON.get(item.icon or "")

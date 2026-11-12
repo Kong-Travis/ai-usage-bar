@@ -1,24 +1,24 @@
-A 10/20  A2 10/20  A3 10/20  B 10/20 | color=#248a3d,#30d158
+A 10/20  A2 10/20  A3 10/20  B 10/20 |
 ---
 Claude Code | color=gray size=12 sfimage=sparkle sfcolor=gray
 A: claude-a1 - token | size=13
-5 giờ: 10%  (reset sau 1 giờ 1 phút) | color=#248a3d,#30d158
-Tuần: 20%  (reset sau 1 ngày) | color=#248a3d,#30d158
+5 giờ: 10%  (reset sau 1 giờ 1 phút)
+Tuần: 20%  (reset sau 1 ngày)
 Hiện trên thanh menu | checked=true bash="<SELF>" param1=--hide param2=claude-a1 terminal=false refresh=true
 ---
 A2: claude-a2 - token | size=13
-5 giờ: 10%  (reset sau 1 giờ 1 phút) | color=#248a3d,#30d158
-Tuần: 20%  (reset sau 1 ngày) | color=#248a3d,#30d158
+5 giờ: 10%  (reset sau 1 giờ 1 phút)
+Tuần: 20%  (reset sau 1 ngày)
 Hiện trên thanh menu | checked=true bash="<SELF>" param1=--hide param2=claude-a2 terminal=false refresh=true
 ---
 A3: claude-a3 - token | size=13
-5 giờ: 10%  (reset sau 1 giờ 1 phút) | color=#248a3d,#30d158
-Tuần: 20%  (reset sau 1 ngày) | color=#248a3d,#30d158
+5 giờ: 10%  (reset sau 1 giờ 1 phút)
+Tuần: 20%  (reset sau 1 ngày)
 Hiện trên thanh menu | checked=true bash="<SELF>" param1=--hide param2=claude-a3 terminal=false refresh=true
 ---
 B: claude-b1 - token | size=13
-5 giờ: 10%  (reset sau 3 giờ) | color=#248a3d,#30d158
-Tuần: 20%  (reset sau 3 ngày) | color=#248a3d,#30d158
+5 giờ: 10%  (reset sau 3 giờ)
+Tuần: 20%  (reset sau 3 ngày)
 Số liệu cũ, lần cập nhật vừa rồi bị lỗi | color=gray size=11
 Lỗi: RuntimeError: no rate-limit headers | color=gray size=11
 Hiện trên thanh menu | checked=true bash="<SELF>" param1=--hide param2=claude-b1 terminal=false refresh=true

@@ -1,20 +1,20 @@
-T 0/65/1  W 93/72/50 | color=#c93400,#ff9f0a
+T 0/65/1  W 93/72/50 |
 ---
 Claude Code | color=gray size=12 sfimage=sparkle sfcolor=gray
 T: claude-token - token | size=13
-5-hour: 0%  (resets in 2h 15m) | color=#248a3d,#30d158
-Weekly: 65%  (resets in 2d 21h) | color=#248a3d,#30d158
-At this pace it runs out in ~2d 5h, before the reset | color=#b8860b,#ffd60a size=11 sfimage=exclamationmark.triangle sfcolor=#b8860b,#ffd60a
-Fable (weekly): 1%  (resets in 2d 21h) | color=#248a3d,#30d158
+5-hour: 0%  (resets in 2h 15m)
+Weekly: 65%  (resets in 2d 21h)
+At this pace it runs out in ~2d 5h, before the reset | size=11 sfimage=exclamationmark.triangle sfcolor=#b8860b,#ffd60a
+Fable (weekly): 1%  (resets in 2d 21h)
 Show in the menu bar | checked=true bash="<SELF>" param1=--hide param2=claude-token terminal=false refresh=true
 ---
 W: work - token | size=13
-5-hour: 93%  (resets in 45m) | color=#c93400,#ff9f0a
-At this pace it runs out in ~20m, before the reset | color=#c93400,#ff9f0a size=11 sfimage=exclamationmark.triangle sfcolor=#c93400,#ff9f0a
-Weekly: 72%  (resets in 6d) | color=#b8860b,#ffd60a
-At this pace it runs out in ~9h 20m, before the reset | color=#b8860b,#ffd60a size=11 sfimage=exclamationmark.triangle sfcolor=#b8860b,#ffd60a
-Fable (weekly): 50%  (resets in 6d) | color=#248a3d,#30d158
-At this pace it runs out in ~1d, before the reset | color=#b8860b,#ffd60a size=11 sfimage=exclamationmark.triangle sfcolor=#b8860b,#ffd60a
+5-hour: 93%  (resets in 45m)
+At this pace it runs out in ~20m, before the reset | size=11 sfimage=exclamationmark.triangle sfcolor=#c93400,#ff9f0a
+Weekly: 72%  (resets in 6d)
+At this pace it runs out in ~9h 20m, before the reset | size=11 sfimage=exclamationmark.triangle sfcolor=#b8860b,#ffd60a
+Fable (weekly): 50%  (resets in 6d)
+At this pace it runs out in ~1d, before the reset | size=11 sfimage=exclamationmark.triangle sfcolor=#b8860b,#ffd60a
 Show in the menu bar | checked=true bash="<SELF>" param1=--hide param2=work terminal=false refresh=true
 ---
 Refreshes every 3 minutes | color=gray size=11

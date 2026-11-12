@@ -38,8 +38,8 @@ class UserConfig:
         language = en                   English menus (default: vi, Vietnamese)
         hide = c-m, c-nsc               accounts (by label) left out of the bar title
         compact = on                    show only an icon in the bar
-        warn = 70                       percent at which a limit turns yellow (green below)
-        crit = 90                       percent at which it turns orange and notifies
+        warn = 70                       percent at which a limit's icons turn yellow (green below)
+        crit = 90                       percent at which they turn orange and it notifies
         notify = off                    no notifications
     """
     token_files: Tuple[Tuple[str, str], ...] = ()

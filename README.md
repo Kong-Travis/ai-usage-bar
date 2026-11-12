@@ -14,7 +14,7 @@ Each group is one account:
 - `Cx`: OpenAI Codex. 5-hour limit % / weekly limit %. The menu also shows the plan and the email.
 - `Ag`: Google Antigravity (`agy`). The weekly limit % of each model group.
 
-Green below 70%, yellow from 70%, orange from 90%. Click it to see account names and how long until each limit resets.
+The numbers use the normal system text color at every level (OK below 70%, warning from 70%, critical from 90%). Click it to see account names and how long until each limit resets.
 A limit that is on course to run out before its reset gets a "will run out before the reset"
 warning. The menu is in Vietnamese by default; click "Switch to English" to change it.
 
@@ -66,7 +66,7 @@ distribution.
   then says so, and opening `claude` once renews it.
 - Too many accounts in the bar? Untick "Hiện trên thanh menu" / "Show in the menu bar" under an
   account to leave it out of the bar; it stays in the menu, so you can tick it again. Click
-  "Thu gọn" / "Collapse to an icon" to show only an icon (tinted green, yellow or orange like the numbers),
+  "Thu gọn" / "Collapse to an icon" to show only an icon (tinted green, yellow or orange),
   and "Mở rộng" / "Expand" at the top of the menu to bring the numbers back. On Windows the tray
   is always an icon, so there is no collapse item there.
 - New version available? The menu checks GitHub every hour and then shows "Cập nhật ngay" /
@@ -82,8 +82,8 @@ distribution.
   hide = c-m, c-nsc             # accounts (by name) left out of the bar
   compact = on                  # only an icon in the bar
   notify = off                  # no notifications (they come at the crit % and at 100%)
-  warn = 70                     # yellow from this % (default 70)
-  crit = 90                     # orange and a notification from this % (default 90)
+  warn = 70                     # warning from this % (default 70)
+  crit = 90                     # critical and a notification from this % (default 90)
   codex = off                   # hide Codex accounts
   agy = off                     # hide Antigravity
   ```
