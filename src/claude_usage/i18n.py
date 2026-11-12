@@ -64,6 +64,7 @@ CATALOG: Dict[str, Dict[str, str]] = {
     "show_in_bar": {VI: "Hiện trên thanh menu", EN: "Show in the menu bar"},
     "collapse": {VI: "Thu gọn (chỉ hiện biểu tượng)", EN: "Collapse to an icon"},
     "expand": {VI: "Mở rộng (hiện số liệu)", EN: "Expand (show the numbers)"},
+    "color_by_level": {VI: "Tô màu số liệu theo mức", EN: "Color the numbers by level"},
     # Shown in the language it switches to (see Presenter.language_item).
     "switch_language": {VI: "Chuyển sang tiếng Việt", EN: "Switch to English"},
     "quit": {VI: "Thoát", EN: "Quit"},

@@ -15,7 +15,9 @@ CHECK_UPDATE = "check_update"  # ask GitHub for the latest release now, then red
 # Settings written to the conf file: show or hide one account in the bar title (value: its
 # label), and the icon-only bar (value: "on" or "off").
 SHOW_ACCOUNT, HIDE_ACCOUNT, COMPACT = "show_account", "hide_account", "compact"
-SETTINGS = (LANGUAGE, SHOW_ACCOUNT, HIDE_ACCOUNT, COMPACT)
+# Color the bar numbers and limit lines by level (value: "on" or "off"; off by default).
+COLORS = "colors"
+SETTINGS = (LANGUAGE, SHOW_ACCOUNT, HIDE_ACCOUNT, COMPACT, COLORS)
 GRAY, GREEN = "gray", "#2e7d32"
 # Limit levels: below warn, from warn, from crit. Tuned for a dark background (the GNOME top
 # bar, a dark menu); frontends that know the appearance map each one to their own shade.
@@ -54,6 +56,9 @@ class Menu:
     items: Tuple[MenuItem, ...]
     # Draw only an icon in the bar. title still holds the numbers, for tooltips.
     compact: bool = False
+    # Color text with the level colors too. Off, they tint icons only and text keeps the
+    # system color (colored numbers were too glaring for some users).
+    colored: bool = False
 
 
 WARNING_ICON = "warning"
@@ -107,13 +112,15 @@ def title_token(r: AccountRow, worst_only: bool = False) -> str:
 class Presenter:
     def __init__(self, clock: Clock, tr: Translator, version: str, repo_url: str, warn: float,
                  crit: float, max_in_title: int, show_support: bool = False,
-                 hidden: Iterable[str] = (), compact: bool = False):
+                 hidden: Iterable[str] = (), compact: bool = False, colored: bool = False):
         """hidden: labels of the accounts left out of the bar title. compact: icon-only bar.
+        colored: level colors on the text, not only on icons.
         max_in_title: up to this many visible accounts show every number in the bar; up to
         twice as many show each account's highest number; more show the single highest."""
         self._clock = clock
         self._hidden = frozenset(hidden)
         self._compact = compact
+        self._colored = colored
         self._show_support = show_support
         self._tr = tr
         self._version = version
@@ -224,12 +231,15 @@ class Presenter:
             items.append(MenuItem(tr("support"), action=Action(OPEN, self._repo_url + "#support")))
         if not self._compact:
             items.append(MenuItem(tr("collapse"), action=Action(COMPACT, value="on")))
+        items.append(MenuItem(tr("color_by_level"), checked=self._colored,
+                              action=Action(COLORS, value="off" if self._colored else "on")))
         items.append(self.language_item())
         if not new_tag:  # with a newer release, the update items at the top stand in for it
             items.append(MenuItem(tr("check_update_done" if up_to_date else "check_update"),
                                   action=Action(CHECK_UPDATE)))
         items.append(MenuItem(tr("refresh_now"), action=Action(REFRESH)))
-        return Menu(title, self.color(worst), bool(new_tag), worst, tuple(items), compact)
+        return Menu(title, self.color(worst), bool(new_tag), worst, tuple(items), compact,
+                    self._colored)
 
     def window_name(self, w: Window) -> str:
         """"5 giờ", "Tuần", "Fable (tuần)", "Gemini (5 giờ)"; another cadence keeps the

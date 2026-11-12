@@ -446,7 +446,7 @@ class ControllerWiring(unittest.TestCase):
         controller.run()
         texts = [c[1] for c in api.named("create_icon")]
         self.assertEqual(texts, ["?", "87"])  # loading menu, then the built one
-        self.assertEqual(backend._menu.items[-1].text, "Quit")  # with_quit added by the controller
+        self.assertEqual(backend._menu.items[-1].text, "Quit")  # tray_menu added by the controller
         self.assertEqual(api.named("post_quit"), [("post_quit",)])
         self.assertEqual(api.named("set_timer"), [("set_timer", 1, 60000)])
         self.assertEqual(api.live_icons, set())

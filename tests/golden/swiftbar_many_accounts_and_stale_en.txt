@@ -27,6 +27,7 @@ Refreshes every 3 minutes | color=gray size=11
 Bar numbers: % used of each limit, in the order above | color=gray size=11
 Version v<VERSION> | color=gray size=11 href=https://github.com/Kong-Travis/ai-usage-bar
 Collapse to an icon | bash="<SELF>" param1=--compact param2=on terminal=false refresh=true
+Color the numbers by level | bash="<SELF>" param1=--colors param2=on terminal=false refresh=true
 Chuyển sang tiếng Việt | bash="<SELF>" param1=--lang param2=vi terminal=false refresh=true
 Check for updates (up to date) | bash="<SELF>" param1=--check-update terminal=false refresh=true
 Refresh now | bash="<SELF>" param1=--force terminal=false refresh=true

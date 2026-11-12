@@ -11,8 +11,8 @@ from claude_usage.xbar import ARGOS, SWIFTBAR, XbarRenderer
 SELF = "/opt/claude usage/plugin.py"
 
 
-def menu(items=(), title="C 1/2/3", color=None, update=False):
-    return Menu(title, color, update, None, tuple(items))
+def menu(items=(), title="C 1/2/3", color=None, update=False, colored=False):
+    return Menu(title, color, update, None, tuple(items), colored=colored)
 
 
 class Title(unittest.TestCase):
@@ -23,6 +23,8 @@ class Title(unittest.TestCase):
         self.assertEqual(r.title(menu(color=WARN_COLOR)), "C 1/2/3 |")
         self.assertEqual(r.title(menu(color=CRIT_COLOR, update=True)),
                          "C 1/2/3 | sfimage=arrow.down.circle")
+        # With the colors setting on, the level color as a "light,dark" pair for a light bar.
+        self.assertEqual(r.title(menu(color=WARN_COLOR, colored=True)), "C 1/2/3 | color=#b8860b,#ffd60a")
         self.assertNotIn("dropdown", r.title(menu()))
 
     def test_argos_uses_icon_name_and_hides_the_dropdown_line(self):
@@ -30,6 +32,8 @@ class Title(unittest.TestCase):
         self.assertEqual(r.title(menu()), "C 1/2/3 | dropdown=false")
         self.assertEqual(r.title(menu(color=CRIT_COLOR, update=True)),
                          "C 1/2/3 | iconName=software-update-available-symbolic dropdown=false")
+        # No pair syntax on Argos: the dark-panel shade alone.
+        self.assertEqual(r.title(menu(color=CRIT_COLOR, colored=True)), "C 1/2/3 | color=#ff9f0a dropdown=false")
         self.assertNotIn("sfimage", r.title(menu(update=True)))
 
     def test_default_flavor_is_swiftbar(self):
@@ -81,6 +85,8 @@ class Icons(unittest.TestCase):
         self.assertEqual(r.item(MenuItem("w", color=CRIT_COLOR, icon=WARNING_ICON)),
                          "w | sfimage=exclamationmark.triangle sfcolor=#c93400,#ff9f0a")
         self.assertEqual(r.item(MenuItem("Weekly: 75%", color=WARN_COLOR)), "Weekly: 75%")
+        self.assertEqual(r.item(MenuItem("Weekly: 75%", color=WARN_COLOR), colored=True),
+                         "Weekly: 75% | color=#b8860b,#ffd60a")
 
     def test_argos_icon_names(self):
         r = XbarRenderer(SELF, ARGOS)

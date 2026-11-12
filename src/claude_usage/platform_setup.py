@@ -127,7 +127,8 @@ def build(host: Host, clock: Clock = None, http: HttpClient = None,
     releases = ReleaseChecker(http, endpoints.github_api, REPO, cache, UPDATE_EVERY)
     sources, readers = build_providers(host, config, clock, tr, http, endpoints)
     presenter = Presenter(clock, tr, VERSION, REPO_URL, config.warn, config.crit, MAX_IN_TITLE,
-                          SHOW_SUPPORT, hidden=config.hidden, compact=config.compact)
+                          SHOW_SUPPORT, hidden=config.hidden, compact=config.compact,
+                          colored=config.colors)
     # Alerts use the same crit as the orange (critical) color, so a notification matches what the bar shows.
     alerts = LimitAlerts(notifier if notifier and config.notify else NullNotifier(), cache, tr,
                          config.crit, presenter.time_left, presenter.window_name, clock)

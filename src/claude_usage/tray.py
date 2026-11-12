@@ -15,7 +15,7 @@ from dataclasses import replace
 from typing import Callable, List, Optional, Sequence
 
 from .i18n import Translator
-from .view import (CHECK_UPDATE, OPEN, QUIT, REFRESH, SETTINGS, UPDATE, Action, Menu, MenuItem,
+from .view import (CHECK_UPDATE, COLORS, OPEN, QUIT, REFRESH, SETTINGS, UPDATE, Action, Menu, MenuItem,
                    SEPARATOR)
 
 TRAY_REFRESH_SECONDS = 60
@@ -114,7 +114,7 @@ class TrayController:
             try:
                 if force:
                     self._refresh()
-                menu = with_quit(self._build_menu(False), self._translator())
+                menu = tray_menu(self._build_menu(False), self._translator())
             except Exception as e:  # keep the icon alive whatever happens
                 menu = error_menu(e, self._translator())
             finally:
@@ -171,8 +171,11 @@ def quit_item(tr: Translator) -> MenuItem:
     return MenuItem(tr("quit"), action=Action(QUIT))
 
 
-def with_quit(menu: Menu, tr: Translator) -> Menu:
-    return replace(menu, items=menu.items + (SEPARATOR, quit_item(tr)))
+def tray_menu(menu: Menu, tr: Translator) -> Menu:
+    """The menu as a tray shows it: a Quit item at the end, and no text-color setting, since
+    tray menus draw no colors (the icon carries the level)."""
+    items = tuple(i for i in menu.items if not (i.action and i.action.kind == COLORS))
+    return replace(menu, items=items + (SEPARATOR, quit_item(tr)))
 
 
 def loading_menu(tr: Translator) -> Menu:

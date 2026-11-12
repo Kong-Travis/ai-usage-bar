@@ -552,7 +552,7 @@ class AgyReader:
 from dataclasses import dataclass
 from typing import Mapping
 
-VERSION = "1.4.1"
+VERSION = "1.4.2"
 REPO = "Kong-Travis/ai-usage-bar"
 PLUGIN_PATH_IN_REPO = "plugin/claude-usage.1m.py"
 REPO_URL = "https://github.com/" + REPO
@@ -655,6 +655,7 @@ CATALOG: Dict[str, Dict[str, str]] = {
     "show_in_bar": {VI: "Hiện trên thanh menu", EN: "Show in the menu bar"},
     "collapse": {VI: "Thu gọn (chỉ hiện biểu tượng)", EN: "Collapse to an icon"},
     "expand": {VI: "Mở rộng (hiện số liệu)", EN: "Expand (show the numbers)"},
+    "color_by_level": {VI: "Tô màu số liệu theo mức", EN: "Color the numbers by level"},
     # Shown in the language it switches to (see Presenter.language_item).
     "switch_language": {VI: "Chuyển sang tiếng Việt", EN: "Switch to English"},
     "quit": {VI: "Thoát", EN: "Quit"},
@@ -847,8 +848,9 @@ class UserConfig:
         language = en                   English menus (default: vi, Vietnamese)
         hide = c-m, c-nsc               accounts (by label) left out of the bar title
         compact = on                    show only an icon in the bar
-        warn = 70                       percent at which a limit's icons turn yellow (green below)
-        crit = 90                       percent at which they turn orange and it notifies
+        colors = on                     color the numbers by level too, not only the icons
+        warn = 70                       percent at which a limit turns yellow (green below)
+        crit = 90                       percent at which it turns orange and notifies
         notify = off                    no notifications
     """
     token_files: Tuple[Tuple[str, str], ...] = ()
@@ -856,6 +858,7 @@ class UserConfig:
     language: Optional[str] = None
     hidden: Tuple[str, ...] = ()
     compact: bool = False
+    colors: bool = False
     warn: int = WARN_PCT
     crit: int = CRIT_PCT
     notify: bool = True
@@ -884,6 +887,8 @@ class UserConfig:
                 fields["hidden"] = split_labels(val)
             elif key == COMPACT_KEY:
                 fields["compact"] = is_on(val)
+            elif key == COLORS_KEY:
+                fields["colors"] = is_on(val)
             elif key == "notify":
                 fields["notify"] = not is_off(val)
             elif key in ("warn", "crit") and val.isdigit() and 0 < int(val) <= 100:
@@ -899,7 +904,7 @@ class UserConfig:
         return cfg
 
 
-HIDE_KEY, COMPACT_KEY = "hide", "compact"
+HIDE_KEY, COMPACT_KEY, COLORS_KEY = "hide", "compact", "colors"
 
 
 def is_off(value: str) -> bool:
@@ -1575,7 +1580,9 @@ CHECK_UPDATE = "check_update"  # ask GitHub for the latest release now, then red
 # Settings written to the conf file: show or hide one account in the bar title (value: its
 # label), and the icon-only bar (value: "on" or "off").
 SHOW_ACCOUNT, HIDE_ACCOUNT, COMPACT = "show_account", "hide_account", "compact"
-SETTINGS = (LANGUAGE, SHOW_ACCOUNT, HIDE_ACCOUNT, COMPACT)
+# Color the bar numbers and limit lines by level (value: "on" or "off"; off by default).
+COLORS = "colors"
+SETTINGS = (LANGUAGE, SHOW_ACCOUNT, HIDE_ACCOUNT, COMPACT, COLORS)
 GRAY, GREEN = "gray", "#2e7d32"
 # Limit levels: below warn, from warn, from crit. Tuned for a dark background (the GNOME top
 # bar, a dark menu); frontends that know the appearance map each one to their own shade.
@@ -1614,6 +1621,9 @@ class Menu:
     items: Tuple[MenuItem, ...]
     # Draw only an icon in the bar. title still holds the numbers, for tooltips.
     compact: bool = False
+    # Color text with the level colors too. Off, they tint icons only and text keeps the
+    # system color (colored numbers were too glaring for some users).
+    colored: bool = False
 
 
 WARNING_ICON = "warning"
@@ -1667,13 +1677,15 @@ def title_token(r: AccountRow, worst_only: bool = False) -> str:
 class Presenter:
     def __init__(self, clock: Clock, tr: Translator, version: str, repo_url: str, warn: float,
                  crit: float, max_in_title: int, show_support: bool = False,
-                 hidden: Iterable[str] = (), compact: bool = False):
+                 hidden: Iterable[str] = (), compact: bool = False, colored: bool = False):
         """hidden: labels of the accounts left out of the bar title. compact: icon-only bar.
+        colored: level colors on the text, not only on icons.
         max_in_title: up to this many visible accounts show every number in the bar; up to
         twice as many show each account's highest number; more show the single highest."""
         self._clock = clock
         self._hidden = frozenset(hidden)
         self._compact = compact
+        self._colored = colored
         self._show_support = show_support
         self._tr = tr
         self._version = version
@@ -1784,12 +1796,15 @@ class Presenter:
             items.append(MenuItem(tr("support"), action=Action(OPEN, self._repo_url + "#support")))
         if not self._compact:
             items.append(MenuItem(tr("collapse"), action=Action(COMPACT, value="on")))
+        items.append(MenuItem(tr("color_by_level"), checked=self._colored,
+                              action=Action(COLORS, value="off" if self._colored else "on")))
         items.append(self.language_item())
         if not new_tag:  # with a newer release, the update items at the top stand in for it
             items.append(MenuItem(tr("check_update_done" if up_to_date else "check_update"),
                                   action=Action(CHECK_UPDATE)))
         items.append(MenuItem(tr("refresh_now"), action=Action(REFRESH)))
-        return Menu(title, self.color(worst), bool(new_tag), worst, tuple(items), compact)
+        return Menu(title, self.color(worst), bool(new_tag), worst, tuple(items), compact,
+                    self._colored)
 
     def window_name(self, w: Window) -> str:
         """"5 giờ", "Tuần", "Fable (tuần)", "Gemini (5 giờ)"; another cadence keeps the
@@ -2481,7 +2496,8 @@ def build(host: Host, clock: Clock = None, http: HttpClient = None,
     releases = ReleaseChecker(http, endpoints.github_api, REPO, cache, UPDATE_EVERY)
     sources, readers = build_providers(host, config, clock, tr, http, endpoints)
     presenter = Presenter(clock, tr, VERSION, REPO_URL, config.warn, config.crit, MAX_IN_TITLE,
-                          SHOW_SUPPORT, hidden=config.hidden, compact=config.compact)
+                          SHOW_SUPPORT, hidden=config.hidden, compact=config.compact,
+                          colored=config.colors)
     # Alerts use the same crit as the orange (critical) color, so a notification matches what the bar shows.
     alerts = LimitAlerts(notifier if notifier and config.notify else NullNotifier(), cache, tr,
                          config.crit, presenter.time_left, presenter.window_name, clock)
@@ -2616,7 +2632,7 @@ class TrayController:
             try:
                 if force:
                     self._refresh()
-                menu = with_quit(self._build_menu(False), self._translator())
+                menu = tray_menu(self._build_menu(False), self._translator())
             except Exception as e:  # keep the icon alive whatever happens
                 menu = error_menu(e, self._translator())
             finally:
@@ -2673,8 +2689,11 @@ def quit_item(tr: Translator) -> MenuItem:
     return MenuItem(tr("quit"), action=Action(QUIT))
 
 
-def with_quit(menu: Menu, tr: Translator) -> Menu:
-    return replace(menu, items=menu.items + (SEPARATOR, quit_item(tr)))
+def tray_menu(menu: Menu, tr: Translator) -> Menu:
+    """The menu as a tray shows it: a Quit item at the end, and no text-color setting, since
+    tray menus draw no colors (the icon carries the level)."""
+    items = tuple(i for i in menu.items if not (i.action and i.action.kind == COLORS))
+    return replace(menu, items=items + (SEPARATOR, quit_item(tr)))
 
 
 def loading_menu(tr: Translator) -> Menu:
@@ -2715,7 +2734,7 @@ SWIFTBAR, ARGOS = "swiftbar", "argos"
 CLI_FLAGS = {REFRESH: "--force", UPDATE: "--update", CHECK_UPDATE: "--check-update"}
 # Settings take one value: the language, the account label, or on / off.
 SETTING_FLAGS = {LANGUAGE: "--lang", SHOW_ACCOUNT: "--show", HIDE_ACCOUNT: "--hide",
-                 COMPACT: "--compact"}
+                 COMPACT: "--compact", COLORS: "--colors"}
 # The icon of the compact bar. CoreGlyphs' name_availability.plist lists "speedometer" in the
 # 2019 set (macOS 10.15) and name_aliases.strings maps it to gauge.with.dots.needle.67percent,
 # so it resolves on Big Sur, the oldest macOS with sfimage, and on every later one.
@@ -2733,15 +2752,16 @@ ITEM_SFIMAGE = {CLAUDE: "sparkle", CODEX: "terminal", AGY: "atom",
 ITEM_ARGOS_ICON = {CLAUDE: "starred-symbolic", CODEX: "utilities-terminal-symbolic",
                    AGY: "applications-science-symbolic", WARNING_ICON: "dialog-warning-symbolic"}
 
-# Level colors tint icons only: text keeps the system color in every state, because colored
-# numbers in the bar were too glaring. SwiftBar gets "light,dark" pairs (no space: params split
-# on spaces): the view's colors suit a dark background, a light menu bar needs darker shades.
+# Level colors always tint icons; text gets them only with Menu.colored, otherwise it keeps the
+# system color. SwiftBar gets "light,dark" pairs (no space: params split on spaces): the view's
+# colors suit a dark background, a light menu bar needs darker shades. Argos has no pair syntax
+# and the GNOME top bar is dark, so it keeps the view's color.
 SWIFTBAR_COLORS = {OK_COLOR: "#248a3d," + OK_COLOR, WARN_COLOR: "#b8860b," + WARN_COLOR,
                    CRIT_COLOR: "#c93400," + CRIT_COLOR}
 
 
 def is_level_color(color: str) -> bool:
-    """A limit level color: it tints icons but never text."""
+    """A limit level color: it tints icons, and text only when the menu is colored."""
     return color in SWIFTBAR_COLORS
 
 
@@ -2767,13 +2787,15 @@ class XbarRenderer:
         for item in menu.items:
             if item.action and item.action.kind == QUIT:
                 continue  # the host app has its own quit
-            lines.append("---" if item.separator else self.item(item))
+            lines.append("---" if item.separator else self.item(item, menu.colored))
         return "\n".join(lines) + "\n"
 
     def title(self, menu: Menu) -> str:
         if menu.compact:
             return self.compact_title(menu)
         line = menu.title + " |"
+        if menu.colored and menu.title_color:
+            line += " color=" + self.color(menu.title_color)
         if self._flavor == ARGOS:
             if menu.update_available:
                 line += " iconName=" + UPDATE_ARGOS_ICON
@@ -2794,9 +2816,10 @@ class XbarRenderer:
             line += " sfcolor=" + self.color(menu.title_color)
         return line + " tooltip=" + xbar_quote(menu.title.replace("|", "/"))
 
-    def item(self, item: MenuItem) -> str:
+    def item(self, item: MenuItem, colored: bool = False) -> str:
+        """One menu line. colored: level colors apply to the text, not only to the icon."""
         params: List[str] = []
-        if item.color and not is_level_color(item.color):
+        if item.color and (colored or not is_level_color(item.color)):
             params.append("color=" + self.color(item.color))
         if item.size:
             params.append("size=%d" % item.size)
@@ -2842,7 +2865,7 @@ from typing import List, Optional
 
 
 USAGE = """usage: claude-usage [--force | --update | --check-update | --tray | --lang vi|en |
-                     --show LABEL | --hide LABEL | --compact on|off]
+                     --show LABEL | --hide LABEL | --compact on|off | --colors on|off]
   (none)          print the menu for SwiftBar (macOS) or Argos (GNOME)
   --force         probe every account now, ignoring the cache
   --update        install the latest release over this file
@@ -2851,7 +2874,8 @@ USAGE = """usage: claude-usage [--force | --update | --check-update | --tray | -
   --lang LANG     menu language: vi (default) or en
   --show LABEL    show this account in the bar title again
   --hide LABEL    leave this account out of the bar title (it stays in the menu)
-  --compact on    show only an icon in the bar; off shows the numbers again"""
+  --compact on    show only an icon in the bar; off shows the numbers again
+  --colors on     color the numbers by level; off (default) keeps them in the text color"""
 
 
 def tray_backend(os_name: str, tr: Translator) -> TrayBackend:
@@ -2870,8 +2894,9 @@ def change_setting(host: Host, action: Action) -> None:
         set_conf_value(host.conf_path, "language", action.value)
     elif action.kind in (SHOW_ACCOUNT, HIDE_ACCOUNT):
         set_account_hidden(host.conf_path, host.home, action.value, action.kind == HIDE_ACCOUNT)
-    elif action.kind == COMPACT:
-        set_conf_value(host.conf_path, COMPACT_KEY, action.value)
+    elif action.kind in (COMPACT, COLORS):
+        set_conf_value(host.conf_path, COMPACT_KEY if action.kind == COMPACT else COLORS_KEY,
+                       action.value)
 
 
 def setting_from_args(args: List[str]) -> Optional[Action]:
@@ -2883,7 +2908,7 @@ def setting_from_args(args: List[str]) -> Optional[Action]:
     if kind == LANGUAGE:
         value = normalize_language(value) or ""
         return Action(kind, value=value) if value in LANGUAGES else None
-    if kind == COMPACT:
+    if kind in (COMPACT, COLORS):
         return Action(kind, value=value.lower()) if value.lower() in ("on", "off") else None
     return Action(kind, value=value) if kind and value else None
 

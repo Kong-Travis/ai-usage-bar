@@ -21,6 +21,7 @@ Cập nhật mỗi 3 phút | color=gray size=11
 Số trên thanh: % đã dùng của từng hạn mức, theo thứ tự ở trên | color=gray size=11
 Phiên bản v<VERSION> | color=gray size=11 href=https://github.com/Kong-Travis/ai-usage-bar
 Thu gọn (chỉ hiện biểu tượng) | bash="<SELF>" param1=--compact param2=on terminal=false refresh=true
+Tô màu số liệu theo mức | bash="<SELF>" param1=--colors param2=on terminal=false refresh=true
 Switch to English | bash="<SELF>" param1=--lang param2=en terminal=false refresh=true
 Kiểm tra cập nhật (đã là bản mới nhất) | bash="<SELF>" param1=--check-update terminal=false refresh=true
 Làm mới ngay | bash="<SELF>" param1=--force terminal=false refresh=true

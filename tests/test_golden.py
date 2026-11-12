@@ -173,6 +173,30 @@ class BarChoices(unittest.TestCase):
                 probes = [r for r in server.requests if r[1] == "/v1/messages"]
                 self.assertEqual(len(probes), 2)  # one per account: settings never re-probe
 
+    def test_colors_setting_colors_the_numbers_and_turns_back_off(self):
+        with FakeHome() as home:
+            plans, tag = scenario_two_accounts(home)
+            with FakeServer(plans, latest_tag=tag) as server:
+                plain = run_plugin(home, server)
+                self.assertIn('Tô màu số liệu theo mức | bash="<SELF>" param1=--colors param2=on ', plain)
+                self.assertNotIn("color=#c93400", plain.replace("sfcolor=", ""))
+
+                self.assertEqual(run_plugin(home, server, "--colors", "on"), "")
+                self.assertIn("colors = on", self.conf(home))
+                colored = run_plugin(home, server)
+                self.assertTrue(colored.startswith("T 0/65/1  W 93/72/50 | color=#c93400,#ff9f0a\n"),
+                                colored[:60])
+                self.assertIn("5 giờ: 93%  (reset sau 45 phút) | color=#c93400,#ff9f0a", colored)
+                self.assertIn('Tô màu số liệu theo mức | checked=true bash="<SELF>" param1=--colors '
+                              'param2=off ', colored)
+
+                run_plugin(home, server, "--colors", "off")
+                self.assertEqual(run_plugin(home, server), plain)
+                self.assertEqual(self.conf(home), "keychain = off\nwork = ~/tokens/work.txt\n"
+                                                  "colors = off\n")
+                probes = [r for r in server.requests if r[1] == "/v1/messages"]
+                self.assertEqual(len(probes), 2)  # one per account: settings never re-probe
+
     def test_hiding_every_account_leaves_an_icon_to_click(self):
         with FakeHome() as home:
             plans, tag = scenario_two_accounts(home)

@@ -8,13 +8,13 @@ from .i18n import LANGUAGES, Translator, normalize_language
 from .infra import CliLocator
 from .notify import Notifier, macos_notifier, notify_send_notifier
 from .platform_setup import LINUX, MACOS, WINDOWS, Host, build
-from .sources import COMPACT_KEY, set_account_hidden, set_conf_value
+from .sources import COLORS_KEY, COMPACT_KEY, set_account_hidden, set_conf_value
 from .tray import TrayBackend, TrayController, TrayNotifier, relaunch
-from .view import COMPACT, HIDE_ACCOUNT, LANGUAGE, SHOW_ACCOUNT, Action
+from .view import COLORS, COMPACT, HIDE_ACCOUNT, LANGUAGE, SHOW_ACCOUNT, Action
 from .xbar import ARGOS, SETTING_FLAGS, SWIFTBAR, XbarRenderer
 
 USAGE = """usage: claude-usage [--force | --update | --check-update | --tray | --lang vi|en |
-                     --show LABEL | --hide LABEL | --compact on|off]
+                     --show LABEL | --hide LABEL | --compact on|off | --colors on|off]
   (none)          print the menu for SwiftBar (macOS) or Argos (GNOME)
   --force         probe every account now, ignoring the cache
   --update        install the latest release over this file
@@ -23,7 +23,8 @@ USAGE = """usage: claude-usage [--force | --update | --check-update | --tray | -
   --lang LANG     menu language: vi (default) or en
   --show LABEL    show this account in the bar title again
   --hide LABEL    leave this account out of the bar title (it stays in the menu)
-  --compact on    show only an icon in the bar; off shows the numbers again"""
+  --compact on    show only an icon in the bar; off shows the numbers again
+  --colors on     color the numbers by level; off (default) keeps them in the text color"""
 
 
 def tray_backend(os_name: str, tr: Translator) -> TrayBackend:
@@ -42,8 +43,9 @@ def change_setting(host: Host, action: Action) -> None:
         set_conf_value(host.conf_path, "language", action.value)
     elif action.kind in (SHOW_ACCOUNT, HIDE_ACCOUNT):
         set_account_hidden(host.conf_path, host.home, action.value, action.kind == HIDE_ACCOUNT)
-    elif action.kind == COMPACT:
-        set_conf_value(host.conf_path, COMPACT_KEY, action.value)
+    elif action.kind in (COMPACT, COLORS):
+        set_conf_value(host.conf_path, COMPACT_KEY if action.kind == COMPACT else COLORS_KEY,
+                       action.value)
 
 
 def setting_from_args(args: List[str]) -> Optional[Action]:
@@ -55,7 +57,7 @@ def setting_from_args(args: List[str]) -> Optional[Action]:
     if kind == LANGUAGE:
         value = normalize_language(value) or ""
         return Action(kind, value=value) if value in LANGUAGES else None
-    if kind == COMPACT:
+    if kind in (COMPACT, COLORS):
         return Action(kind, value=value.lower()) if value.lower() in ("on", "off") else None
     return Action(kind, value=value) if kind and value else None
 

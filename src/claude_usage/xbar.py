@@ -4,14 +4,14 @@ from __future__ import annotations
 from typing import List
 
 from .domain import AGY, CLAUDE, CODEX
-from .view import (CHECK_UPDATE, COMPACT, CRIT_COLOR, HIDE_ACCOUNT, LANGUAGE, OK_COLOR, OPEN, QUIT, REFRESH,
+from .view import (CHECK_UPDATE, COLORS, COMPACT, CRIT_COLOR, HIDE_ACCOUNT, LANGUAGE, OK_COLOR, OPEN, QUIT, REFRESH,
                    SHOW_ACCOUNT, UPDATE, WARN_COLOR, WARNING_ICON, Menu, MenuItem)
 
 SWIFTBAR, ARGOS = "swiftbar", "argos"
 CLI_FLAGS = {REFRESH: "--force", UPDATE: "--update", CHECK_UPDATE: "--check-update"}
 # Settings take one value: the language, the account label, or on / off.
 SETTING_FLAGS = {LANGUAGE: "--lang", SHOW_ACCOUNT: "--show", HIDE_ACCOUNT: "--hide",
-                 COMPACT: "--compact"}
+                 COMPACT: "--compact", COLORS: "--colors"}
 # The icon of the compact bar. CoreGlyphs' name_availability.plist lists "speedometer" in the
 # 2019 set (macOS 10.15) and name_aliases.strings maps it to gauge.with.dots.needle.67percent,
 # so it resolves on Big Sur, the oldest macOS with sfimage, and on every later one.
@@ -29,15 +29,16 @@ ITEM_SFIMAGE = {CLAUDE: "sparkle", CODEX: "terminal", AGY: "atom",
 ITEM_ARGOS_ICON = {CLAUDE: "starred-symbolic", CODEX: "utilities-terminal-symbolic",
                    AGY: "applications-science-symbolic", WARNING_ICON: "dialog-warning-symbolic"}
 
-# Level colors tint icons only: text keeps the system color in every state, because colored
-# numbers in the bar were too glaring. SwiftBar gets "light,dark" pairs (no space: params split
-# on spaces): the view's colors suit a dark background, a light menu bar needs darker shades.
+# Level colors always tint icons; text gets them only with Menu.colored, otherwise it keeps the
+# system color. SwiftBar gets "light,dark" pairs (no space: params split on spaces): the view's
+# colors suit a dark background, a light menu bar needs darker shades. Argos has no pair syntax
+# and the GNOME top bar is dark, so it keeps the view's color.
 SWIFTBAR_COLORS = {OK_COLOR: "#248a3d," + OK_COLOR, WARN_COLOR: "#b8860b," + WARN_COLOR,
                    CRIT_COLOR: "#c93400," + CRIT_COLOR}
 
 
 def is_level_color(color: str) -> bool:
-    """A limit level color: it tints icons but never text."""
+    """A limit level color: it tints icons, and text only when the menu is colored."""
     return color in SWIFTBAR_COLORS
 
 
@@ -63,13 +64,15 @@ class XbarRenderer:
         for item in menu.items:
             if item.action and item.action.kind == QUIT:
                 continue  # the host app has its own quit
-            lines.append("---" if item.separator else self.item(item))
+            lines.append("---" if item.separator else self.item(item, menu.colored))
         return "\n".join(lines) + "\n"
 
     def title(self, menu: Menu) -> str:
         if menu.compact:
             return self.compact_title(menu)
         line = menu.title + " |"
+        if menu.colored and menu.title_color:
+            line += " color=" + self.color(menu.title_color)
         if self._flavor == ARGOS:
             if menu.update_available:
                 line += " iconName=" + UPDATE_ARGOS_ICON
@@ -90,9 +93,10 @@ class XbarRenderer:
             line += " sfcolor=" + self.color(menu.title_color)
         return line + " tooltip=" + xbar_quote(menu.title.replace("|", "/"))
 
-    def item(self, item: MenuItem) -> str:
+    def item(self, item: MenuItem, colored: bool = False) -> str:
+        """One menu line. colored: level colors apply to the text, not only to the icon."""
         params: List[str] = []
-        if item.color and not is_level_color(item.color):
+        if item.color and (colored or not is_level_color(item.color)):
             params.append("color=" + self.color(item.color))
         if item.size:
             params.append("size=%d" % item.size)

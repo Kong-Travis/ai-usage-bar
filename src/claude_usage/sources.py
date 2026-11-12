@@ -38,8 +38,9 @@ class UserConfig:
         language = en                   English menus (default: vi, Vietnamese)
         hide = c-m, c-nsc               accounts (by label) left out of the bar title
         compact = on                    show only an icon in the bar
-        warn = 70                       percent at which a limit's icons turn yellow (green below)
-        crit = 90                       percent at which they turn orange and it notifies
+        colors = on                     color the numbers by level too, not only the icons
+        warn = 70                       percent at which a limit turns yellow (green below)
+        crit = 90                       percent at which it turns orange and notifies
         notify = off                    no notifications
     """
     token_files: Tuple[Tuple[str, str], ...] = ()
@@ -47,6 +48,7 @@ class UserConfig:
     language: Optional[str] = None
     hidden: Tuple[str, ...] = ()
     compact: bool = False
+    colors: bool = False
     warn: int = WARN_PCT
     crit: int = CRIT_PCT
     notify: bool = True
@@ -75,6 +77,8 @@ class UserConfig:
                 fields["hidden"] = split_labels(val)
             elif key == COMPACT_KEY:
                 fields["compact"] = is_on(val)
+            elif key == COLORS_KEY:
+                fields["colors"] = is_on(val)
             elif key == "notify":
                 fields["notify"] = not is_off(val)
             elif key in ("warn", "crit") and val.isdigit() and 0 < int(val) <= 100:
@@ -90,7 +94,7 @@ class UserConfig:
         return cfg
 
 
-HIDE_KEY, COMPACT_KEY = "hide", "compact"
+HIDE_KEY, COMPACT_KEY, COLORS_KEY = "hide", "compact", "colors"
 
 
 def is_off(value: str) -> bool:

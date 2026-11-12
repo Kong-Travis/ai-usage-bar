@@ -8,8 +8,8 @@ from unittest import mock
 from claude_usage.i18n import Translator
 from claude_usage.tray import (TRAY_REFRESH_SECONDS, TrayBackend, TrayController, TrayNotifier,
                                error_menu, loading_menu, quit_item, relaunch, relaunch_command,
-                               with_quit)
-from claude_usage.view import (COMPACT, HIDE_ACCOUNT, LANGUAGE, OPEN, QUIT, REFRESH, SEPARATOR,
+                               tray_menu)
+from claude_usage.view import (COLORS, COMPACT, HIDE_ACCOUNT, LANGUAGE, OPEN, QUIT, REFRESH, SEPARATOR,
                                SHOW_ACCOUNT, UPDATE, CHECK_UPDATE, Action, Menu,
                                MenuItem)
 
@@ -184,8 +184,8 @@ class ActionsTest(unittest.TestCase):
         self.assertEqual([a.kind for a in h.settings], [HIDE_ACCOUNT, SHOW_ACCOUNT, COMPACT])
         self.assertEqual(len(h.build_calls), 3)
 
-    def test_with_quit_keeps_the_compact_flag(self):
-        menu = with_quit(Menu("C 1/2", None, False, 2.0, (), compact=True), Translator("vi"))
+    def test_tray_menu_keeps_the_compact_flag(self):
+        menu = tray_menu(Menu("C 1/2", None, False, 2.0, (), compact=True), Translator("vi"))
         self.assertTrue(menu.compact)
 
 
@@ -247,12 +247,18 @@ class ReloadTest(unittest.TestCase):
 
 
 class MenuHelpers(unittest.TestCase):
-    def test_with_quit_appends_a_separator_and_quit_without_mutating(self):
+    def test_tray_menu_appends_a_separator_and_quit_without_mutating(self):
         before = REAL.items
-        out = with_quit(REAL, VI)
+        out = tray_menu(REAL, VI)
         self.assertEqual(out.items, before + (SEPARATOR, quit_item(VI)))
         self.assertEqual(REAL.items, before)
         self.assertEqual((out.title, out.worst), (REAL.title, REAL.worst))
+
+    def test_tray_menu_drops_the_text_color_setting(self):
+        # Tray menus draw no colors, so the toggle would do nothing there.
+        colors = MenuItem("Tô màu", checked=True, action=Action(COLORS, value="off"))
+        out = tray_menu(Menu("C 1/2", None, False, 2.0, (MenuItem("row"), colors)), VI)
+        self.assertNotIn(COLORS, [i.action.kind for i in out.items if i.action])
 
     def test_english_quit_and_loading(self):
         en = Translator("en")
