@@ -11,14 +11,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # ubuntu-24.04: the newest image with Python 3.9 builds for setup-python.
+        # ubuntu-24.04: the newest image with Python 3.9 builds for setup-python
+        # (actions/python-versions has no 3.9.x for ubuntu-26.04).
         os: [ubuntu-24.04, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0  # tests/test_bundle.py runs the v1.2.2 updater from its git tag
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.9"  # macOS ships 3.9.6 as /usr/bin/python3
       - name: Bundle is up to date with src/
@@ -29,8 +30,8 @@ jobs:
 
   linux-desktop:
     # Plain/Argos output, the AppIndicator tray under Xvfb + D-Bus, and the Linux installer.
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Docker checks
         run: bash tests/docker/run.sh

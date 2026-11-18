@@ -1,7 +1,7 @@
 #!/bin/bash
 # Linux checks in Docker: builds a scratch bundle and installer, then runs
 #   1. plain (Argos) mode in python:3.9-slim with fake credentials and a fake API,
-#   2. the tray backend under Xvfb + D-Bus in ubuntu:24.04 and debian:bullseye (Python 3.9),
+#   2. the tray backend under Xvfb + D-Bus in ubuntu:26.04 and debian:bullseye (Python 3.9),
 #   3. install-linux.sh non-interactively (tray, Argos, auto-detect, missing PyGObject).
 # Usage: tests/docker/run.sh [WORKDIR]   (never touches plugin/ or dist/)
 set -u
@@ -33,7 +33,7 @@ step "plain mode, python:3.9-slim"
 run docker run --rm --init "${MOUNTS[@]}" -e PYTHONPATH=/repo/tests python:3.9-slim \
   python3 /repo/tests/docker/plain_check.py /work/linux-bundle.py
 
-for base in ubuntu:24.04 debian:bullseye; do
+for base in ubuntu:26.04 debian:bullseye; do
   tag="cub-linux-test:${base//[:.]/-}"
   docker build -q --build-arg BASE="$base" -t "$tag" "$ROOT/tests/docker" >/dev/null || { FAILED=1; continue; }
   step "tray backend, $base"
@@ -41,11 +41,11 @@ for base in ubuntu:24.04 debian:bullseye; do
     xvfb-run -a dbus-run-session -- bash /repo/tests/docker/tray_check.sh /work/linux-bundle.py
 done
 
-step "installer, ubuntu:24.04 with PyGObject"
-run docker run --rm --init "${MOUNTS[@]}" cub-linux-test:ubuntu-24-04 \
+step "installer, ubuntu:26.04 with PyGObject"
+run docker run --rm --init "${MOUNTS[@]}" cub-linux-test:ubuntu-26-04 \
   xvfb-run -a dbus-run-session -- bash /repo/tests/docker/installer_check.sh /work/ai-usage-install-linux.sh gui
 
-step "installer, ubuntu:24.04 without PyGObject"
+step "installer, ubuntu:26.04 without PyGObject"
 docker build -q --build-arg GUI=0 -t cub-linux-test:nogui "$ROOT/tests/docker" >/dev/null || FAILED=1
 run docker run --rm --init "${MOUNTS[@]}" cub-linux-test:nogui \
   bash /repo/tests/docker/installer_check.sh /work/ai-usage-install-linux.sh nogui

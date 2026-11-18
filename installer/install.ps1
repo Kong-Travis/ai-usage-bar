@@ -13,7 +13,7 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }
 
-$PythonVersion = '3.12.10'  # last 3.12 release with Windows installers on python.org
+$PythonVersion = '3.15.2'  # newest stable Python; must match the winget id Python.Python.3.15 below
 $InstallDir = Join-Path $env:LOCALAPPDATA 'claude-usage'
 $PluginPath = Join-Path $InstallDir 'claude-usage.py'
 $ConfPath = Join-Path (Join-Path $env:USERPROFILE '.config') 'claude-usage.conf'
@@ -27,7 +27,7 @@ $Messages = @{
         title         = 'Cài đặt "AI Usage" (biểu tượng ở khay hệ thống)'
         step1         = '1/4  Kiểm tra Python (cần bản 3.9 trở lên)'
         py_found      = 'OK: Python {0} ({1})'
-        py_missing    = 'Máy chưa có Python 3.9+. Đang cài Python 3.12 cho riêng tài khoản này (không cần quyền admin)...'
+        py_missing    = 'Máy chưa có Python 3.9+. Đang cài Python 3.15 cho riêng tài khoản này (không cần quyền admin)...'
         py_winget     = 'Đang cài bằng winget, chờ khoảng 1-2 phút...'
         py_no_winget  = 'Không cài được bằng winget, tải bộ cài từ python.org...'
         py_download   = 'Đang tải {0}'
@@ -79,7 +79,7 @@ $Messages = @{
         title         = 'Installing "AI Usage" (notification area icon)'
         step1         = '1/4  Checking Python (3.9 or newer)'
         py_found      = 'OK: Python {0} ({1})'
-        py_missing    = 'Python 3.9+ was not found. Installing Python 3.12 for this account only (no admin rights needed)...'
+        py_missing    = 'Python 3.9+ was not found. Installing Python 3.15 for this account only (no admin rights needed)...'
         py_winget     = 'Installing with winget, this takes 1-2 minutes...'
         py_no_winget  = 'winget could not install it, downloading the installer from python.org...'
         py_download   = 'Downloading {0}'
@@ -248,7 +248,7 @@ function Install-PythonWithWinget {
     $saved = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     try {
-        & winget install -e --id Python.Python.3.12 --scope user --silent --accept-package-agreements --accept-source-agreements | Out-Host
+        & winget install -e --id Python.Python.3.15 --scope user --silent --accept-package-agreements --accept-source-agreements | Out-Host
     } catch {
     } finally {
         $ErrorActionPreference = $saved
